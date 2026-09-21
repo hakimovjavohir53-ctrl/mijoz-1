@@ -8,6 +8,7 @@ window.ZEMAX_CONFIG = {
   phone: "",          // telefon, masalan "+998901234567"
   telegram: "",       // Telegram nomi @ belgisiz, masalan "zemax_manager"
   web3formsKey: "",   // web3forms.com dan olingan kalit (ixtiyoriy)
+  sheetUrl: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQV-GqtfpgMaytswnuyJ5Pxy6tdQiY0d5kp16h52mh7Cw28wmOiPSEPv6npg0mCW7502Q25udu0XbhH/pub?gid=343875229&single=true&output=csv",       // Google Jadval (CSV) havolasi. To'ldirilsa, narxlar jadvaldan olinadi
 
   // Narxlar (so'm)
   prices: {

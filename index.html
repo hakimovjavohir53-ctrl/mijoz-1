@@ -343,6 +343,7 @@ details .body { padding: 0 16px 16px; }
     phone: "",          // sotuvchi telefoni, masalan "+998901234567"
     telegram: "",       // sotuvchi Telegram nomi, masalan "zemax_manager" (@ belgisisiz)
     web3formsKey: "",   // web3forms.com dan olingan kalit (buyurtma emailga keladi)
+    sheetUrl: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQV-GqtfpgMaytswnuyJ5Pxy6tdQiY0d5kp16h52mh7Cw28wmOiPSEPv6npg0mCW7502Q25udu0XbhH/pub?gid=343875229&single=true&output=csv",  // Google Jadval (CSV) havolasi: narxlar shu jadvaldan olinadi
     prices: {
       kvLow: 1600000,      // pastki shkaf, 1 kv narxi (so'm)
       kvUp: 1200000,       // yuqori shkaf va antresol, 1 kv narxi
@@ -364,7 +365,7 @@ details .body { padding: 0 16px 16px; }
   (function applyExternalConfig() {
     var X = window.ZEMAX_CONFIG;
     if (X && typeof X === "object") {
-      ["phone", "telegram", "web3formsKey"].forEach(function (k) {
+      ["phone", "telegram", "web3formsKey", "sheetUrl"].forEach(function (k) {
         if (typeof X[k] === "string") CONFIG[k] = X[k].trim();
       });
       if (X.prices && typeof X.prices === "object") {
@@ -949,10 +950,101 @@ details .body { padding: 0 16px 16px; }
     }
   });
 
+  /* ---------- Narxlarni Google Jadvaldan o'qish (ixtiyoriy) ---------- */
+  var SHEET_CACHE = "zemax-narx-cache-v1";
+
+  function parseCSV(text) {
+    var rows = [], row = [], cur = "", q = false, i, c;
+    text = String(text).replace(/^\uFEFF/, "");
+    for (i = 0; i < text.length; i++) {
+      c = text.charAt(i);
+      if (q) {
+        if (c === '"') {
+          if (text.charAt(i + 1) === '"') { cur += '"'; i++; } else q = false;
+        } else cur += c;
+      } else if (c === '"') q = true;
+      else if (c === ",") { row.push(cur); cur = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text.charAt(i + 1) === "\n") i++;
+        row.push(cur); rows.push(row); row = []; cur = "";
+      } else cur += c;
+    }
+    if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+  function normKey(s) {
+    return String(s).toLowerCase().replace(/['\u2019\u02BB\u2018`\u00B4"]/g, "").replace(/\s+/g, " ").trim();
+  }
+  function digitsOnly(v) {
+    var n = Number(String(v).replace(/[^\d]/g, ""));
+    return isFinite(n) ? n : 0;
+  }
+
+  function sheetToConfig(rows) {
+    var out = { prices: {}, extras: [] }, found = false;
+    rows.forEach(function (r) {
+      if (!r || r.length < 2) return;
+      var label = String(r[0] || "").trim(), val = String(r[1] || "").trim();
+      if (!label) return;
+      var k = normKey(label);
+      if (k.indexOf("qoshimcha") === 0) {
+        var ci = label.indexOf(":");
+        var name = ci >= 0 ? label.slice(ci + 1).trim() : label.replace(/^qo.?shimcha\s*/i, "").trim();
+        if (name) {
+          out.extras.push({ id: "x" + out.extras.length + "_" + normKey(name).replace(/[^a-z0-9]/g, ""), name: name, price: digitsOnly(val) });
+          found = true;
+        }
+      } else if (k.indexOf("pastki") >= 0) { out.prices.kvLow = digitsOnly(val); found = true; }
+      else if (k.indexOf("yuqori") >= 0) { out.prices.kvUp = digitsOnly(val); found = true; }
+      else if (k.indexOf("penal") >= 0) { out.prices.kvPenal = digitsOnly(val); found = true; }
+      else if (k.indexOf("stol usti") >= 0) { out.prices.counterPerM = digitsOnly(val); found = true; }
+      else if (k.indexOf("ornatish") >= 0) { out.prices.install = digitsOnly(val); found = true; }
+      else if (k.indexOf("telefon") >= 0) { out.phone = val; found = true; }
+      else if (k.indexOf("telegram") >= 0) { out.telegram = val.replace(/^@/, ""); found = true; }
+      else if (k.indexOf("web3") >= 0 || k.indexOf("kalit") >= 0) { out.web3formsKey = val; found = true; }
+    });
+    return found ? out : null;
+  }
+
+  function applySheet(cfg) {
+    if (!cfg) return;
+    ["phone", "telegram", "web3formsKey"].forEach(function (k) { if (cfg[k]) CONFIG[k] = cfg[k]; });
+    Object.keys(cfg.prices || {}).forEach(function (k) { CONFIG.prices[k] = cfg.prices[k]; });
+    if (cfg.extras && cfg.extras.length) {
+      CONFIG.extras = cfg.extras.filter(function (e) { return e.price > 0; });
+    }
+  }
+
+  function applyCachedSheet() {
+    if (!CONFIG.sheetUrl) return;
+    try {
+      var c = localStorage.getItem(SHEET_CACHE);
+      if (c) applySheet(JSON.parse(c));
+    } catch (e) {}
+  }
+
+  function loadSheet() {
+    var url = CONFIG.sheetUrl;
+    if (!url || typeof fetch !== "function") return;
+    fetch(url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now())
+      .then(function (res) { if (!res.ok) throw new Error("http"); return res.text(); })
+      .then(function (t) {
+        var cfg = sheetToConfig(parseCSV(t));
+        if (!cfg) return;
+        applySheet(cfg);
+        try { localStorage.setItem(SHEET_CACHE, JSON.stringify(cfg)); } catch (e) {}
+        renderChoices();
+        update();
+      })
+      .catch(function () { /* internet yoki jadval bo'lmasa, oldingi narxlar ishlaydi */ });
+  }
+
+  applyCachedSheet();
   fillInputs();
   renderChoices();
   syncUI();
   update();
+  loadSheet();
 })();
 </script>
 </body>
