@@ -343,6 +343,8 @@ details .body { padding: 0 16px 16px; }
     phone: "",          // sotuvchi telefoni, masalan "+998901234567"
     telegram: "",       // sotuvchi Telegram nomi, masalan "zemax_manager" (@ belgisisiz)
     web3formsKey: "",   // web3forms.com dan olingan kalit (buyurtma emailga keladi)
+    botToken: "",   // Telegram bot tokeni (buyurtma botga avtomatik keladi)
+    chatId: "",         // Sizning Telegram chat ID'ingiz
     sheetUrl: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQV-GqtfpgMaytswnuyJ5Pxy6tdQiY0d5kp16h52mh7Cw28wmOiPSEPv6npg0mCW7502Q25udu0XbhH/pub?gid=343875229&single=true&output=csv",  // Google Jadval (CSV) havolasi: narxlar shu jadvaldan olinadi
     prices: {
       kvLow: 1600000,      // pastki shkaf, 1 kv narxi (so'm)
@@ -365,7 +367,7 @@ details .body { padding: 0 16px 16px; }
   (function applyExternalConfig() {
     var X = window.ZEMAX_CONFIG;
     if (X && typeof X === "object") {
-      ["phone", "telegram", "web3formsKey", "sheetUrl"].forEach(function (k) {
+      ["phone", "telegram", "web3formsKey", "sheetUrl", "botToken", "chatId"].forEach(function (k) {
         if (typeof X[k] === "string") CONFIG[k] = X[k].trim();
       });
       if (X.prices && typeof X.prices === "object") {
@@ -913,7 +915,26 @@ details .body { padding: 0 16px 16px; }
     var text = orderText(r, name, phone, note);
     var btn = $("send");
 
-    if (CONFIG.web3formsKey && typeof fetch === "function") {
+    if (CONFIG.botToken && CONFIG.chatId && typeof fetch === "function") {
+      btn.disabled = true;
+      msg("Yuborilmoqda...");
+      fetch("https://api.telegram.org/bot" + CONFIG.botToken + "/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: CONFIG.chatId, text: text })
+      }).then(function (res) { return res.json(); }).then(function (d) {
+        btn.disabled = false;
+        if (d && d.ok) { done(name, text); }
+        else { throw new Error("fail"); }
+      }).catch(function () {
+        btn.disabled = false;
+        msg("Yuborib bo'lmadi. Qayta urinib ko'ring yoki quyidagi tugma orqali bog'laning.", true);
+        showContacts(text);
+        $("okTitle").textContent = "Yuborib bo'lmadi";
+        $("okText").textContent = "Tarmoqni tekshiring yoki bevosita bog'laning.";
+        $("ok").hidden = false;
+      });
+    } else if (CONFIG.web3formsKey && typeof fetch === "function") {
       btn.disabled = true;
       msg("Yuborilmoqda...");
       fetch("https://api.web3forms.com/submit", {
@@ -1002,13 +1023,15 @@ details .body { padding: 0 16px 16px; }
       else if (k.indexOf("telefon") >= 0) { out.phone = val; found = true; }
       else if (k.indexOf("telegram") >= 0) { out.telegram = val.replace(/^@/, ""); found = true; }
       else if (k.indexOf("web3") >= 0 || k.indexOf("kalit") >= 0) { out.web3formsKey = val; found = true; }
+      else if (k.indexOf("bot token") >= 0 || k === "token") { out.botToken = val; found = true; }
+      else if (k.indexOf("chat id") >= 0) { out.chatId = val; found = true; }
     });
     return found ? out : null;
   }
 
   function applySheet(cfg) {
     if (!cfg) return;
-    ["phone", "telegram", "web3formsKey"].forEach(function (k) { if (cfg[k]) CONFIG[k] = cfg[k]; });
+    ["phone", "telegram", "web3formsKey", "botToken", "chatId"].forEach(function (k) { if (cfg[k]) CONFIG[k] = cfg[k]; });
     Object.keys(cfg.prices || {}).forEach(function (k) { CONFIG.prices[k] = cfg.prices[k]; });
     if (cfg.extras && cfg.extras.length) {
       CONFIG.extras = cfg.extras.filter(function (e) { return e.price > 0; });
