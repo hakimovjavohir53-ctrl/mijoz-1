@@ -1546,9 +1546,9 @@ details .body { padding: 0 16px 16px; }
         var vals = cfg.materials[mk], target = null;
         if (mk === "__birinchi__") target = CONFIG.materials[0];
         else {
-          target = CONFIG.materials.filter(function (m) {
-            return normKey(m.id) === mk || normKey(m.name).indexOf(mk) >= 0 || mk.indexOf(normKey(m.id)) >= 0;
-          })[0];
+          /* avval id bo'yicha aniq moslik, keyin nom bo'yicha (akril nomida "korpus laminat" bor, shuning uchun id birinchi) */
+          target = CONFIG.materials.filter(function (m) { return normKey(m.id) === mk; })[0]
+            || CONFIG.materials.filter(function (m) { return normKey(m.name).indexOf(mk) >= 0; })[0];
         }
         if (target) ["kvLow", "kvUp", "kvPenal"].forEach(function (f) { if (vals[f] != null) target[f] = vals[f]; });
       });
