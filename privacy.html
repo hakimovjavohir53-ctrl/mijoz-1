@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maxfiylik siyosati — ZEMAX Kitchen</title>
+<meta name="description" content="ZEMAX Kitchen oshxona narxi kalkulyatori: shaxsga doir ma'lumotlarni qayta ishlash va maxfiylik siyosati.">
+<style>
+:root {
+  --bg: #F4F1ED; --surface: #FFFFFF; --ink: #17130E; --muted: #625B53; --line: #DCD5CC; --accent: #F28123; --mark: #FFF1B8;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0F0D0B; --surface: #1A1612; --ink: #F3EEE8; --muted: #B1A89E; --line: #342D26; --mark: #4A3E10; }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+a { color: var(--accent); }
+.back { display: inline-block; margin-bottom: 8px; font-weight: 600; text-decoration: none; }
+h1 { font-size: 26px; line-height: 1.25; margin: 4px 0 6px; }
+h2 { font-size: 19px; margin: 28px 0 8px; }
+p, li { margin: 8px 0; }
+ul, ol { padding-left: 22px; }
+.meta { color: var(--muted); font-size: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 16px 0; }
+.fill { background: var(--mark); padding: 0 4px; border-radius: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; display: block; overflow-x: auto; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid var(--line); min-width: 120px; }
+th { background: var(--surface); }
+.nav { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 15px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html" onclick="if (history.length > 1) { history.back(); return false; }">&larr; Kalkulyatorga qaytish</a>
+  <h1>Maxfiylik siyosati</h1>
+  <p class="meta">Kuchga kirgan sana: 2026-yil 16-oktabr. Oxirgi yangilanish: 2026-yil 16-oktabr.</p>
+
+  <div class="card">
+    <p><strong>Qisqacha:</strong> biz sizdan faqat buyurtma bo'yicha siz bilan bog'lanish uchun zarur bo'lgan ma'lumotlarni (ism, telefon raqam, kalkulyatorda tanlagan parametrlar va izoh) olamiz. Ularni sizning roziligingiz bilan, faqat shu maqsadda ishlatamiz va sotmaymiz.</p>
+  </div>
+
+  <h2>1. Umumiy qoidalar</h2>
+  <p>Mazkur Maxfiylik siyosati «ZEMAX Kitchen» oshxona mebeli narxi kalkulyatori (veb-sahifa va Telegram mini-ilova, keyingi o'rinlarda — «Xizmat») orqali olinadigan shaxsga doir ma'lumotlarni qayta ishlash tartibini belgilaydi.</p>
+  <p>Siyosat O'zbekiston Respublikasining «Shaxsga doir ma'lumotlar to'g'risida»gi O'RQ-547-son Qonuni (2019-yil 2-iyul, keyingi o'zgartirishlar bilan, jumladan 2026-yil 26-martdagi O'RQ-1125-son Qonun), «Axborotlashtirish to'g'risida»gi, «Kiberxavfsizlik to'g'risida»gi va boshqa amaldagi qonun hujjatlariga muvofiq tuzilgan.</p>
+  <p>Xizmatdan foydalanish va buyurtma shaklini yuborish orqali siz ushbu siyosat bilan tanishganingizni va unda ko'rsatilgan shartlarda shaxsga doir ma'lumotlaringizni qayta ishlashga rozilik berganingizni tasdiqlaysiz.</p>
+
+  <h2>2. Operator haqida ma'lumot</h2>
+  <div class="card">
+    <p>Shaxsga doir ma'lumotlar bazasining operatori (keyingi o'rinlarda — «Operator»):</p>
+    <ul>
+      <li>Nomi: <span class="fill" data-fill="company">[Yuridik shaxs yoki yakka tartibdagi tadbirkor nomi — to'ldiring]</span></li>
+      <li>STIR (INN): <span class="fill" data-fill="inn">[STIR — to'ldiring]</span></li>
+      <li>Manzil: <span class="fill" data-fill="address">[Manzil — to'ldiring]</span></li>
+      <li>Telefon: <span class="fill" data-fill="phone">[Telefon — to'ldiring]</span></li>
+      <li>Telegram: <span class="fill" data-fill="telegram">[@foydalanuvchi_nomi — to'ldiring]</span></li>
+      <li>E-pochta: <span class="fill" data-fill="email">[E-pochta — to'ldiring]</span></li>
+    </ul>
+  </div>
+
+  <h2>3. Qanday ma'lumotlarni yig'amiz</h2>
+  <p><strong>Siz o'zingiz taqdim etadigan ma'lumotlar:</strong></p>
+  <ul>
+    <li>ismingiz;</li>
+    <li>telefon raqamingiz;</li>
+    <li>izoh maydonida yozgan ma'lumot (masalan, manzil, qulay vaqt) — bu maydon ixtiyoriy;</li>
+    <li>kalkulyatorda kiritgan va tanlagan parametrlar: oshxona o'lchamlari va shakli, material, rang, tortmalar soni, qo'shimcha jihozlar va hisoblangan taxminiy narx.</li>
+  </ul>
+  <p><strong>Avtomatik yig'iladigan texnik ma'lumotlar:</strong> brauzer/qurilma turi, IP-manzil, so'rov vaqti. Ular sahifani yetkazib berayotgan hosting va tarmoq xizmatlari hamda Telegram tomonidan o'z qoidalariga muvofiq qayd etilishi mumkin; Operator bu ma'lumotlarni sizni aniqlash maqsadida ishlatmaydi.</p>
+  <p>Biz biometrik va genetik ma'lumotlarni, pasport yoki to'lov kartasi ma'lumotlarini <strong>so'ramaymiz va yig'maymiz</strong>.</p>
+
+  <h2>4. Ma'lumotlarni qayta ishlash maqsadlari</h2>
+  <ul>
+    <li>sizning arizangizni qabul qilish va siz bilan buyurtma bo'yicha bog'lanish;</li>
+    <li>o'lchov, hisob-kitob va shartnoma tuzish bo'yicha taklif tayyorlash;</li>
+    <li>Xizmat ishlashini ta'minlash va takomillashtirish;</li>
+    <li>qonun hujjatlarida nazarda tutilgan talablarni bajarish.</li>
+  </ul>
+  <p>Ma'lumotlaringizni reklama maqsadida uchinchi shaxslarga sotmaymiz va ulardan siz roziligingizsiz marketing xabarlarini yuborish uchun foydalanmaymiz.</p>
+
+  <h2>5. Qayta ishlashning huquqiy asosi</h2>
+  <p>Ma'lumotlaringiz sizning roziligingiz asosida qayta ishlanadi. Rozilik buyurtma shaklidagi tegishli katakchani belgilash va «Buyurtma qoldirish» tugmasini bosish orqali beriladi. Rozilikni istalgan vaqtda qaytarib olish mumkin (8-bo'limga qarang).</p>
+
+  <h2>6. Ma'lumotlar kimlarga va qaerga uzatiladi</h2>
+  <p>Xizmat ishlashi uchun quyidagi uchinchi tomon xizmatlaridan foydalaniladi. Ularning ba'zilari O'zbekiston Respublikasi hududidan tashqarida joylashgan.</p>
+  <table>
+    <thead><tr><th>Xizmat</th><th>Nima uchun</th><th>Qanday ma'lumot</th></tr></thead>
+    <tbody>
+      <tr><td>Telegram (Telegram Messenger)</td><td>Mini-ilovani ochish; buyurtmani Operatorga yetkazish; Operator bilan yozishma</td><td>Ism, telefon, izoh, buyurtma tafsilotlari; Telegram hisobingiz ma'lumotlari (agar Telegram orqali yozsangiz)</td></tr>
+      <tr><td>GitHub Pages (GitHub, Inc.) yoki Cloudflare (Cloudflare, Inc.)</td><td>Veb-sahifani internetda joylashtirish</td><td>Texnik ma'lumotlar (IP, brauzer)</td></tr>
+      <tr><td>jsDelivr CDN</td><td>3D ko'rinish kutubxonasini yuklash</td><td>Texnik ma'lumotlar (IP, brauzer)</td></tr>
+      <tr><td>Google Fonts</td><td>Shriftlarni yuklash</td><td>Texnik ma'lumotlar (IP, brauzer)</td></tr>
+      <tr><td>Google Sheets</td><td>Narxlar jadvalini o'qish</td><td>Sizning shaxsiy ma'lumotlaringiz yuborilmaydi</td></tr>
+      <tr><td>Web3Forms (faqat yoqilgan bo'lsa)</td><td>Buyurtmani e-pochtaga yetkazish</td><td>Ism, telefon, izoh, buyurtma tafsilotlari</td></tr>
+      <tr><td>Google Analytics (faqat yoqilgan bo'lsa)</td><td>Xizmatdan foydalanish statistikasi</td><td>Anonim texnik va statistik ma'lumotlar</td></tr>
+    </tbody>
+  </table>
+  <p>Ma'lumotlaringizni boshqa uchinchi shaxslarga faqat qonun hujjatlarida nazarda tutilgan hollarda, vakolatli davlat organlarining asosli so'rovi bo'yicha beramiz.</p>
+
+  <h2>7. Ma'lumotlarni chet elda saqlash va qayta ishlash</h2>
+  <p>O'zbekiston Respublikasining «Shaxsga doir ma'lumotlar to'g'risida»gi Qonuni 27<sup>1</sup>-moddasiga muvofiq, ayrim toifadagi ma'lumotlar (biometrik, genetik, telekommunikatsiya operatorlari abonentlari ma'lumotlari) O'zbekiston hududida saqlanishi shart. Xizmat bunday ma'lumotlarni yig'maydi.</p>
+  <p>Xizmat orqali olinadigan boshqa ma'lumotlar (ism, telefon, buyurtma tafsilotlari) Telegram kabi xizmatlar orqali O'zbekiston hududidan tashqarida saqlanishi va qayta ishlanishi mumkin. Bu holat Qonunning chet elda saqlash shartlariga muvofiq amalga oshiriladi. Buyurtma shaklini yuborish orqali siz ma'lumotlaringiz shu tarzda uzatilishiga roziligingizni bildirasiz.</p>
+
+  <h2>8. Sizning huquqlaringiz</h2>
+  <p>Qonunchilikka muvofiq siz quyidagi huquqlarga egasiz:</p>
+  <ul>
+    <li>o'zingiz haqingizda qanday ma'lumotlar qayta ishlanayotganini bilish va ularning nusxasini olish;</li>
+    <li>noto'g'ri yoki eskirgan ma'lumotlarni tuzatishni talab qilish;</li>
+    <li>ma'lumotlarni qayta ishlashni to'xtatishni yoki ularni o'chirishni talab qilish;</li>
+    <li>bergan roziligingizni istalgan vaqtda qaytarib olish;</li>
+    <li>huquqlaringiz buzilgan deb hisoblasangiz, vakolatli davlat organiga yoki sudga murojaat qilish.</li>
+  </ul>
+  <p>Huquqlaringizni amalga oshirish uchun 2-bo'limda ko'rsatilgan aloqa vositalari orqali yozing. So'rovingizni qonunchilikda belgilangan muddatda ko'rib chiqamiz. Rozilikni qaytarib olish qaytarib olingunga qadar amalga oshirilgan qayta ishlashning qonuniyligiga ta'sir qilmaydi.</p>
+
+  <h2>9. Saqlash muddati</h2>
+  <p>Buyurtma ma'lumotlari arizangizni ko'rib chiqish va buyurtmani bajarish uchun zarur muddat davomida, shuningdek qonun hujjatlari talab qiladigan muddatda saqlanadi. Maqsadga erishilgach yoki siz rozilikni qaytarib olganingizda ma'lumotlar o'chiriladi yoki shaxsiylashtirilmaydi, qonun boshqacha muddat talab qilgan hollar bundan mustasno.</p>
+
+  <h2>10. Qurilmangizdagi ma'lumotlar (localStorage)</h2>
+  <p>Kalkulyator qulaylik uchun brauzeringiz xotirasida (localStorage) kiritgan o'lcham va tanlovlaringizni hamda buyurtma shaklidagi ism, telefon va izohni saqlab qo'yadi, shunda sahifani qayta ochganingizda ularni qaytadan yozmaysiz. Bu ma'lumotlar faqat sizning qurilmangizda turadi; ularni brauzer sozlamalaridan o'chirishingiz mumkin. Biz reklama uchun mo'ljallangan cookie-fayllardan foydalanmaymiz. Analitika yoqilgan taqdirda Google o'z texnik identifikatorlarini qo'llashi mumkin.</p>
+
+  <h2>11. Ma'lumotlar xavfsizligi</h2>
+  <p>Xizmat HTTPS orqali ishlaydi. Buyurtma ma'lumotlariga faqat Operatorning vakolatli xodimlari kira oladi. Ma'lumotlarni ruxsatsiz kirish, yo'qotish va o'zgartirishdan himoya qilish uchun oqilona tashkiliy va texnik choralar ko'riladi. Shunga qaramay, internet orqali ma'lumot uzatishning mutlaq xavfsizligini kafolatlab bo'lmaydi.</p>
+
+  <h2>12. Voyaga yetmaganlar</h2>
+  <p>Xizmat 18 yoshga to'lgan shaxslar uchun mo'ljallangan. Voyaga yetmaganlarning ma'lumotlarini ongli ravishda yig'maymiz.</p>
+
+  <h2>13. Siyosatga o'zgartirishlar</h2>
+  <p>Ushbu siyosat qonunchilik yoki Xizmat o'zgarganda yangilanishi mumkin. Yangi tahrir shu sahifada e'lon qilingan kundan kuchga kiradi, sahifa tepasida yangilanish sanasi ko'rsatiladi.</p>
+
+  <h2>14. Bog'lanish</h2>
+  <p>Maxfiylik bo'yicha savollar va so'rovlar uchun 2-bo'limda ko'rsatilgan aloqa ma'lumotlaridan foydalaning.</p>
+
+  <div class="nav">
+    <a href="terms.html">Foydalanish shartlari</a>
+    <a href="index.html">Kalkulyator</a>
+  </div>
+</main>
+<script src="narxlar.js"></script>
+<script>
+(function () {
+  var c = window.ZEMAX_CONFIG || {};
+  var map = { phone: c.phone, telegram: c.telegram ? "@" + String(c.telegram).replace(/^@/, "") : "" };
+  Array.prototype.forEach.call(document.querySelectorAll("[data-fill]"), function (el) {
+    var v = map[el.getAttribute("data-fill")];
+    if (v) { el.textContent = v; el.className = ""; }
+  });
+})();
+</script>
+</body>
+</html>
