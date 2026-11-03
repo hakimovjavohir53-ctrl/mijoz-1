@@ -55,3 +55,8 @@ window.ZEMAX_CONFIG = {
     { id: "cutlery", name: "Qoshiq-sanchqi qutisi (qoshiq don)", price: 250000 }
   ]
 };
+counterTypes: [
+  { id: "egger38",   name: "Egger 38 mm",   kv: 850000 },
+  { id: "rossiya38", name: "Rossiya 38 mm", kv: 600000 },
+  { id: "rossiya26", name: "Rossiya 26 mm", kv: 450000 }
+],
