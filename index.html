@@ -310,7 +310,7 @@ details .body { padding: 0 16px 16px; }
       </div>
 
       <div>
-        <label class="check"><input id="island" type="checkbox"> <span>O'rtada orolcha (ostrov)<small>Balandligi 850 mm, faqat 3D ko'rinishda chiqadi</small></span></label>
+        <label class="check"><input id="island" type="checkbox"> <span>O'rtada orolcha (ostrov)<small id="islandHint">Balandligi 850 mm</small></span></label>
         <div class="grid2 sub" id="islandOpts" hidden>
           <div>
             <label for="islandL">Uzunligi, mm</label>
@@ -326,11 +326,7 @@ details .body { padding: 0 16px 16px; }
   </section>
 
   <section aria-labelledby="h-plan">
-    <div class="sec-head"><h2 id="h-plan">Ko'rinishi</h2></div>
-    <div class="seg" role="group" aria-label="Ko'rinish turi" style="margin-bottom:10px">
-      <button type="button" data-view="3d" aria-pressed="true">3D (aylantirish mumkin)</button>
-      <button type="button" data-view="2d" aria-pressed="false">2D chizma</button>
-    </div>
+    <div class="sec-head"><h2 id="h-plan">3D ko'rinish</h2></div>
     <div class="field" id="matViewWrap" hidden style="margin-bottom:10px">
       <label for="matView">Ko'rinish uchun material</label>
       <select id="matView"></select>
@@ -344,15 +340,22 @@ details .body { padding: 0 16px 16px; }
         <label>Stol usti rangi</label>
         <div class="swatch-row" id="counterSwatches"></div>
       </div>
+      <div class="field">
+        <label for="upperDoor">Antresol eshigi</label>
+        <select id="upperDoor">
+          <option value="plain">Oddiy (fasad)</option>
+          <option value="glassBlack">Oyna profil (qora alyuminiy)</option>
+          <option value="glassSilver">Oyna profil (kumush alyuminiy)</option>
+        </select>
+        <p class="pick-hint" id="glassHint"></p>
+      </div>
     </div>
     <div class="plan-box" id="threeBox">
-      <div id="threeWrap" style="position:relative; width:100%; aspect-ratio:4/3; touch-action:none; border-radius:8px; overflow:hidden;"></div>
-      <button type="button" id="doorsToggle" class="btn btn-ghost" style="margin-top:10px; width:100%;">Eshik va tortmalarni ochish</button>
-      <div class="plan-note" id="threeNote">Aylantirish uchun barmoq yoki sichqoncha bilan suring, kattalashtirish uchun siqing yoki skroll qiling.</div>
-    </div>
-    <div class="plan-box" id="planBox" hidden>
-      <svg id="plan" viewBox="0 0 360 240" role="img" aria-label="Oshxona mebeli chizmasi"></svg>
-      <div class="plan-note" id="planNote"></div>
+      <div id="threeWrap" style="background:#E3DDD1; position:relative; width:100%; aspect-ratio:4/3; touch-action:none; border-radius:8px; overflow:hidden;"></div>
+      <button type="button" id="doorsToggle" class="btn btn-ghost" style="margin-top:10px; width:100%;">Hammasini ochish</button>
+      <label class="check" style="margin-top:10px"><input id="showDims" type="checkbox" checked> <span>O'lchamlarni ko'rsatish<small>Har bir modul va umumiy kenglik (mm)</small></span></label>
+      <div class="plan-note" id="fitNote"></div>
+      <div class="plan-note" id="threeNote">Aylantirish uchun suring, kattalashtirish uchun siqing yoki skroll qiling. Eshik, tortma, duhovka va muzlatgichni bosib ochishingiz mumkin.</div>
     </div>
   </section>
 
@@ -422,6 +425,7 @@ details .body { padding: 0 16px 16px; }
   var CONFIG = {
     phone: "",          // sotuvchi telefoni, masalan "+998901234567"
     telegram: "",       // sotuvchi Telegram nomi, masalan "zemax_manager" (@ belgisisiz)
+    orderUrl: "",       // Cloudflare Worker manzili, masalan "/api/order" (berilsa, bot tokeni kerak emas)
     web3formsKey: "",   // web3forms.com dan olingan kalit (buyurtma emailga keladi)
     botToken: "",   // Telegram bot tokeni (buyurtma botga avtomatik keladi)
     chatId: "",         // Sizning Telegram chat ID'ingiz
@@ -432,8 +436,16 @@ details .body { padding: 0 16px 16px; }
       install: 0,          // o'rnatish narxi (0 bo'lsa, ko'rsatilmaydi)
       drawerPrice: 200000, // har bir QO'SHIMCHA (standartdan ortiq) g'aladon narxi
       drawerBase: 3,        // narxga standart kiritilgan g'aladonlar soni (bepul)
-      drawerMax: 15         // g'aladonlarning yuqori chegarasi
+      drawerMax: 15,        // g'aladonlarning yuqori chegarasi
+      islandPerM: 1800000,  // orolcha korpusi: uzunligining 1 metri narxi
+      glassPerKv: 450000    // oyna profil (antresol eshigi): 1 kv yuzasi uchun QO'SHIMCHA narx
     },
+    /* Stol usti turlari: 1 METR (pog.m) narxi. Tanlangan tur narxi stol usti uzunligiga ko'paytiriladi. */
+    counterTypes: [
+      { id: "egger38",   name: "Egger 38 mm",   perM: 510000 },
+      { id: "rossiya38", name: "Rossiya 38 mm", perM: 360000 },
+      { id: "rossiya26", name: "Rossiya 26 mm", perM: 270000 }
+    ],
     /* Har xil material turlari: har biri o'zining pastki/yuqori/penal narxiga ega.
        Bittasi bo'lsin ham, uchtasi bo'lsin ham - hammasi natijada alohida-alohida chiqadi. */
     materials: [
@@ -455,7 +467,7 @@ details .body { padding: 0 16px 16px; }
   (function applyExternalConfig() {
     var X = window.ZEMAX_CONFIG;
     if (X && typeof X === "object") {
-      ["phone", "telegram", "web3formsKey", "sheetUrl", "botToken", "chatId", "ga4Id"].forEach(function (k) {
+      ["phone", "telegram", "orderUrl", "web3formsKey", "sheetUrl", "botToken", "chatId", "ga4Id"].forEach(function (k) {
         if (typeof X[k] === "string") CONFIG[k] = X[k].trim();
       });
       if (X.prices && typeof X.prices === "object") {
@@ -478,6 +490,14 @@ details .body { padding: 0 16px 16px; }
         });
         if (!CONFIG.materials.length) CONFIG.materials = [{ id: "asosiy", name: "Asosiy", kvLow: 0, kvUp: 0, kvPenal: 0 }];
       }
+      if (Array.isArray(X.counterTypes)) {
+        CONFIG.counterTypes = X.counterTypes.filter(function (c) {
+          return c && typeof c.name === "string" && c.name.trim() && (Number(c.perM) > 0 || Number(c.kv) > 0);
+        }).map(function (c, i) {
+          /* perM - 1 metr narxi; eski "kv" yozuvi bo'lsa, 600 mm chuqurlikka ko'paytirib metrga o'tkaziladi */
+          return { id: (typeof c.id === "string" && c.id.trim()) ? c.id.trim() : "ct" + i, name: c.name.trim(), perM: Number(c.perM) || Math.round(Number(c.kv) * 0.6) };
+        });
+      }
       if (Array.isArray(X.extras)) {
         CONFIG.extras = X.extras.filter(function (e) {
           return e && typeof e.id === "string" && typeof e.name === "string";
@@ -493,9 +513,9 @@ details .body { padding: 0 16px 16px; }
   var KEY = "zemax-mijoz-v1";
   function defaults() {
     return {
-      shape: "line", w: 3600, w2: 2400, h: 2700, view: "3d", selMaterial: "", drawerCount: 3, island: false, islandL: 1200, islandD: 900, cabColor: "", counterColor: "", materialView: (CONFIG.materials[0] || {}).id || "",
+      shape: "line", w: 3600, w2: 2400, h: 2700, view: "3d", selMaterial: "", drawerCount: 3, dims: true, upperDoor: "plain", counterType: "", island: false, islandL: 1200, islandD: 900, cabColor: "", counterColor: "", materialView: (CONFIG.materials[0] || {}).id || "",
       hob: true,
-      fridge: false, fridgePos: "right", fridgeW: 700,
+      fridge: false, fridgePos: "right", fridgeW: 650,
       penal: false, penalPos: "right", penalW: 600, penalOven: true, penalMicro: true,
       counterOn: true, installOn: false, sel: {},
       name: "", phone: "", note: ""
@@ -554,7 +574,9 @@ details .body { padding: 0 16px 16px; }
     var net = W - fw - pw;
     var baseH = Math.min(870, H);
     var uBottom = 1450;
-    var uH = Math.min(720, H - uBottom - 30);
+    /* navesnoy (yuqori shkaf) balandroq - 900 mm gacha, antresol esa pastroq (kamida 250 mm) */
+    var uMax = H - 30 - uBottom - 250;
+    var uH = uMax >= 720 ? Math.min(900, uMax) : Math.min(720, H - uBottom - 30);
     var hasUpper = uH >= 300;
     var aH = hasUpper ? H - 30 - (uBottom + uH) : 0;
     var hasAnt = aH >= 250;
@@ -576,223 +598,16 @@ details .body { padding: 0 16px 16px; }
     return walls;
   }
 
-  /* ---------- Chizma ---------- */
-  function drawWall(out, wi, o) {
-    var s = o.s, x0 = o.x0, y0 = o.y0, W = wi.W, H = wi.H;
-    var dw = W * s, dh = H * s;
-    function yy(mm) { return y0 + dh - mm * s; }
-
-    out.push(rect("wall", x0, y0, dw, dh));
-
-    /* Baland bloklar (muzlatgich, penal): chap va o'ng tomonga joylanadi */
-    var tall = [];
-    if (wi.fw > 0) tall.push({ kind: "fridge", w: wi.fw, side: state.fridgePos });
-    if (wi.pw > 0) tall.push({ kind: "penal", w: wi.pw, side: state.penalPos });
-    var lmm = 0, rmm = 0;
-    tall.forEach(function (u) {
-      if (u.side === "left") { u.x = x0 + lmm * s; lmm += u.w; }
-      else { rmm += u.w; u.x = x0 + dw - rmm * s; }
-    });
-    var runX = x0 + lmm * s;
-    var runW = wi.net * s;
-    var n = Math.max(1, Math.round(wi.net / 600));
-    var mw = runW / n;
-
-    var sinkIdx = -1, hobIdx = -1;
-    if (wi.main) {
-      sinkIdx = n >= 2 ? Math.round((n - 1) * 0.3) : 0;
-      hobIdx = n >= 3 ? Math.round((n - 1) * 0.7) : (n === 2 ? 1 : -1);
-      if (hobIdx === sinkIdx) hobIdx = Math.min(n - 1, sinkIdx + 1);
-      if (n === 1) hobIdx = -1;
-      if (!state.hob) hobIdx = -1;
-    }
-
-    function segBox(b, t) {
-      var tt = Math.min(t, H - 30);
-      if (tt - b <= 0) return null;
-      return { y: yy(tt), h: (tt - b) * s };
-    }
-
-    function drawFridge(u) {
-      var fx = u.x, fwPx = u.w * s, fhPx = wi.fh * s, fTop = yy(wi.fh);
-      out.push(rect("fridge", fx, fTop, fwPx, fhPx));
-      var dy = fTop + fhPx * 0.32;
-      out.push(line("fridgeline", fx, dy, fx + fwPx, dy));
-      var hxf = u.side === "left" ? fx + fwPx - 4 : fx + 4;
-      out.push(line("fhandle", hxf, fTop + fhPx * 0.06, hxf, dy - 3));
-      out.push(line("fhandle", hxf, dy + 3, hxf, dy + fhPx * 0.22));
-      if (wi.aboveFridge > 0) {
-        var atop = yy(H - 30), ah = wi.aboveFridge * s;
-        var hl = Math.min(6, fwPx * 0.25);
-        out.push(rect("door2", fx + 0.4, atop, fwPx - 0.8, ah));
-        if (fwPx > 8) out.push(line("handle", fx + fwPx / 2 - hl, atop + ah - 3.5, fx + fwPx / 2 + hl, atop + ah - 3.5));
-      }
-    }
-
-    function drawPenal(u) {
-      var px = u.x, pwPx = u.w * s;
-      var cx = px + pwPx / 2, hl = Math.min(6, pwPx * 0.25);
-      var b;
-      function plain(box, cls, handleAtBottom) {
-        out.push(rect(cls, px + 0.4, box.y, pwPx - 0.8, box.h));
-        if (pwPx > 8) {
-          var hy = handleAtBottom ? box.y + box.h - 3.5 : box.y + 4;
-          out.push(line("handle", cx - hl, hy, cx + hl, hy));
-        }
-      }
-      out.push(rect("plinth", px, yy(100), pwPx, 100 * s));
-      b = segBox(100, 700);
-      if (b) plain(b, "door", false);
-      b = segBox(700, 1290);
-      if (b) {
-        if (state.penalOven) {
-          out.push(rect("oven", px + 0.4, b.y, pwPx - 0.8, b.h));
-          out.push(rect("ovenwin", px + 3, b.y + 8, pwPx - 6, b.h - 12));
-          out.push(line("ohandle", cx - hl, b.y + 4, cx + hl, b.y + 4));
-        } else plain(b, "door", false);
-      }
-      b = segBox(1290, 1670);
-      if (b) {
-        if (state.penalMicro) {
-          out.push(rect("oven", px + 0.4, b.y, pwPx - 0.8, b.h));
-          out.push(rect("ovenwin", px + 3, b.y + 3, (pwPx - 6) * 0.68, b.h - 6));
-          out.push('<circle class="knob" cx="' + f1(px + pwPx - 5) + '" cy="' + f1(b.y + b.h * 0.35) + '" r="1.3"/>');
-          out.push('<circle class="knob" cx="' + f1(px + pwPx - 5) + '" cy="' + f1(b.y + b.h * 0.65) + '" r="1.3"/>');
-        } else plain(b, "door", false);
-      }
-      b = segBox(1670, 100000);
-      if (b) plain(b, "door2", true);
-    }
-
-    tall.forEach(function (u) { if (u.kind === "fridge") drawFridge(u); else drawPenal(u); });
-
-    /* Yuqori shkaflar va antresol */
-    function upperDoors(bottomMm, hMm, cls) {
-      var top = yy(bottomMm + hMm), hp = hMm * s;
-      for (var i = 0; i < n; i++) {
-        if (i === hobIdx) continue;
-        var x = runX + i * mw;
-        out.push(rect(cls, x + 0.4, top, mw - 0.8, hp));
-        if (mw > 8) {
-          var cx = x + mw / 2, hl = Math.min(6, mw * 0.25);
-          out.push(line("handle", cx - hl, top + hp - 3.5, cx + hl, top + hp - 3.5));
-        }
-      }
-    }
-    if (wi.hasUpper) upperDoors(wi.uBottom, wi.uH, "door");
-    if (wi.hasAnt) upperDoors(wi.uBottom + wi.uH, wi.aH, "door2");
-
-    /* Vytyajka */
-    if (wi.hasUpper && hobIdx >= 0) {
-      var hx = runX + hobIdx * mw + mw / 2;
-      var canopyW = mw * 1.1;
-      out.push(rect("hood", hx - canopyW / 2, yy(wi.uBottom + 120), canopyW, 120 * s));
-      out.push(rect("hood", hx - mw * 0.25, yy(H - 30), mw * 0.5, (H - 30 - (wi.uBottom + 120)) * s));
-    }
-
-    /* Pastki shkaflar */
-    var ct = Math.max(3, 40 * s);
-    var plinth = Math.max(2, 100 * s);
-    var baseTop = yy(wi.baseH);
-    var doorTop = baseTop + ct;
-    var doorBottom = yy(0) - plinth;
-    var ovenUnderHob = !(wi.pw > 0 && state.penalOven);
-    out.push(rect("plinth", runX, doorBottom, runW, plinth));
-    for (var i = 0; i < n; i++) {
-      var x = runX + i * mw;
-      var dh2 = doorBottom - doorTop;
-      if (i === hobIdx && ovenUnderHob) {
-        out.push(rect("oven", x + 0.4, doorTop, mw - 0.8, dh2));
-        for (var j = 0; j < 3; j++) {
-          out.push('<circle class="knob" cx="' + f1(x + mw * (j + 1) / 4) + '" cy="' + f1(doorTop + 4) + '" r="1.3"/>');
-        }
-      } else if (i === hobIdx) {
-        /* Penalda duhovka bor: plita tagida tortmalar */
-        out.push(rect("door", x + 0.4, doorTop, mw - 0.8, dh2));
-        out.push(line("drl", x + 0.4, doorTop + dh2 / 3, x + mw - 0.4, doorTop + dh2 / 3));
-        out.push(line("drl", x + 0.4, doorTop + dh2 * 2 / 3, x + mw - 0.4, doorTop + dh2 * 2 / 3));
-        if (mw > 8) {
-          var cxd = x + mw / 2, hld = Math.min(6, mw * 0.25);
-          [0, 1, 2].forEach(function (k) {
-            var yh = doorTop + dh2 * k / 3 + 4;
-            out.push(line("handle", cxd - hld, yh, cxd + hld, yh));
-          });
-        }
-      } else {
-        out.push(rect("door", x + 0.4, doorTop, mw - 0.8, dh2));
-        if (mw > 8) {
-          var cx2 = x + mw / 2, hl2 = Math.min(6, mw * 0.25);
-          out.push(line("handle", cx2 - hl2, doorTop + 4, cx2 + hl2, doorTop + 4));
-        }
-      }
-    }
-
-    /* Stol usti */
-    out.push(rect("top", runX, baseTop, runW, ct));
-
-    /* Varochnaya panel */
-    if (hobIdx >= 0) {
-      var hcx = runX + hobIdx * mw + mw / 2;
-      out.push(rect("hobtop", hcx - mw * 0.42, baseTop - 2.4, mw * 0.84, 2.4));
-    }
-
-    /* Kran */
-    if (sinkIdx >= 0) {
-      var fxk = runX + sinkIdx * mw + mw / 2;
-      out.push('<path class="faucet" d="M' + f1(fxk) + ',' + f1(baseTop) + ' L' + f1(fxk) + ',' + f1(baseTop - 8) +
-        ' Q' + f1(fxk) + ',' + f1(baseTop - 11) + ' ' + f1(fxk + 4) + ',' + f1(baseTop - 11) + '"/>');
-    }
-
-    /* Pol */
-    out.push(line("floor", x0 - 6, yy(0), x0 + dw + 6, yy(0)));
-
-    /* O'lchamlar */
-    var by = y0 + dh + 16;
-    out.push(line("dimline", x0, by, x0 + dw, by));
-    out.push(line("dimline", x0, by - 4, x0, by + 4));
-    out.push(line("dimline", x0 + dw, by - 4, x0 + dw, by + 4));
-    out.push('<text class="dim" x="' + f1(x0 + dw / 2) + '" y="' + f1(by + 15) + '" text-anchor="middle">' + fmt(W) + ' mm</text>');
-
-    var lx = x0 - 12;
-    out.push(line("dimline", lx, y0, lx, y0 + dh));
-    out.push(line("dimline", lx - 4, y0, lx + 4, y0));
-    out.push(line("dimline", lx - 4, y0 + dh, lx + 4, y0 + dh));
-    var tx = lx - 6, ty = y0 + dh / 2;
-    out.push('<text class="dim" x="' + f1(tx) + '" y="' + f1(ty) + '" text-anchor="middle" transform="rotate(-90 ' + f1(tx) + ' ' + f1(ty) + ')">' + fmt(H) + ' mm</text>');
-
-    return n;
-  }
-
-  function draw() {
-    var svg = $("plan");
-    var isL = state.shape === "L";
+  /* ---------- Sig'ish haqida ogohlantirishlar ---------- */
+  function fitNote() {
+    var el = $("fitNote");
+    if (!el) return;
     var walls = getWalls();
     var bad = state.h < 500 || walls.some(function (w) { return w.W < 500; });
-    if (bad) {
-      svg.setAttribute("viewBox", "0 0 360 140");
-      svg.innerHTML = "";
-      $("planNote").textContent = "O'lchamlarni kiriting (kamida 500 mm).";
-      return;
-    }
-    var VBW = 360, padL = 34, padR = 12;
-    var availW = VBW - padL - padR;
-    var maxW = Math.max.apply(null, walls.map(function (w) { return w.W; }));
-    var s = Math.min(availW / maxW, (isL ? 230 : 300) / state.h);
-
-    var out = [], yCursor = 0, totalModules = 0;
-    walls.forEach(function (wi, idx) {
-      var title = isL ? (idx === 0 ? "Asosiy devor" : "Yon devor") : "";
-      var titleH = title ? 20 : 14;
-      if (title) out.push('<text class="dim" x="' + padL + '" y="' + f1(yCursor + 13) + '">' + title + '</text>');
-      var dw = wi.W * s;
-      var x0 = padL + (availW - dw) / 2, y0 = yCursor + titleH;
-      totalModules += drawWall(out, wi, { s: s, x0: x0, y0: y0 });
-      yCursor = y0 + state.h * s + 36;
-    });
-    svg.setAttribute("viewBox", "0 0 360 " + f1(yCursor));
-    svg.innerHTML = out.join("");
-
-    var note = totalModules + " ta modul, har biri taxminan 600 mm. Chizma taxminiy.";
+    if (bad) { el.textContent = "O'lchamlarni kiriting (kamida 500 mm)."; return; }
+    var total = 0;
+    walls.forEach(function (w) { total += smartModules(w.net / 1000).length; });
+    var note = total + " ta modul (300-800 mm standart kengliklarda). Ko'rinish taxminiy.";
     var fridgeWall = (state.fridgePos === "side" && walls[1]) ? walls[1] : walls[0];
     var penalWall = (state.penalPos === "side" && walls[1]) ? walls[1] : walls[0];
     var fridgeWallName = fridgeWall === walls[0] ? "asosiy" : "yon";
@@ -803,41 +618,148 @@ details .body { padding: 0 16px 16px; }
     if (state.penal && penalWall.pw === 0) {
       note += " Penal sig'maydi: " + penalWallName + " devor kamida " + fmt(penalWall.fw + state.penalW + 600) + " mm bo'lishi kerak.";
     }
-    $("planNote").textContent = note;
+    el.textContent = note;
   }
 
   /* ---------- 3D ko'rinish (Three.js) ---------- */
   var THREE_STATE = {
     ready: false, failed: false, positioned: false, renderer: null, scene: null, camera: null, controls: null, group: null, raf: null,
-    doors: [], drawers: [], doorProgress: 0, doorTarget: 0
+    doors: [], drawers: [], doorTarget: 0
   };
   var DOOR_OPEN_ANGLE = 100 * Math.PI / 180;
   var DRAWER_SLIDE = 0.28;
 
+  /* Har bir eshik/tortma/duhovka alohida holatga ega: p - hozirgi ochilish (0..1), t - maqsad (0 yopiq, 1 ochiq) */
+  function newItem(o) { o.p = THREE_STATE.doorTarget; o.t = THREE_STATE.doorTarget; return o; }
+  function registerDoor(pivot, mesh, sign) {
+    var it = newItem({ kind: "door", pivot: pivot, rot: "y", sign: sign, angle: DOOR_OPEN_ANGLE });
+    pivot.traverse(function (o) { if (o.isMesh) o.userData.item = it; });
+    mesh.userData.item = it; THREE_STATE.doors.push(it);
+  }
+  function registerDrawer(mesh, axisName, base) {
+    var it = newItem({ kind: "drawer", mesh: mesh, axis: axisName, base: base });
+    mesh.traverse(function (o) { if (o.isMesh) o.userData.item = it; });
+    mesh.userData.item = it; THREE_STATE.drawers.push(it);
+  }
+  function ease(p) { return p * p * (3 - 2 * p); }
   function applyDoorState() {
-    var p = THREE_STATE.doorProgress;
-    THREE_STATE.doors.forEach(function (d) { d.pivot.rotation.y = d.sign * DOOR_OPEN_ANGLE * p; });
+    THREE_STATE.doors.forEach(function (d) { d.pivot.rotation[d.rot] = d.sign * d.angle * ease(d.p); });
     THREE_STATE.drawers.forEach(function (dw) {
-      var v = dw.base + DRAWER_SLIDE * p;
+      var v = dw.base + DRAWER_SLIDE * ease(dw.p);
       if (dw.axis === "z") dw.mesh.position.z = v; else dw.mesh.position.x = v;
     });
   }
+  /* Har kadrda har bir element o'z maqsadiga qarab siljiydi. Biror narsa harakatlansa true qaytaradi */
+  function stepItems() {
+    var moving = false;
+    function st(it) {
+      if (it.p === it.t) return;
+      var d = it.t - it.p, step = 0.055;
+      it.p = Math.abs(d) <= step ? it.t : it.p + (d > 0 ? step : -step);
+      moving = true;
+    }
+    THREE_STATE.doors.forEach(st);
+    THREE_STATE.drawers.forEach(st);
+    return moving;
+  }
+  function allItems() { return THREE_STATE.doors.concat(THREE_STATE.drawers); }
+  function syncDoorsLabel() {
+    var b = $("doorsToggle"); if (!b) return;
+    var items = allItems();
+    var allOpen = items.length > 0 && items.every(function (it) { return it.t === 1; });
+    b.textContent = allOpen ? "Hammasini yopish" : "Hammasini ochish";
+  }
 
   function threeAvailable() { return typeof THREE !== "undefined" && THREE.OrbitControls; }
+  /* Mebel va stol usti uchun variantlar. tex - protsedura bo'yicha chiziladigan tekstura (rasm fayli kerak emas). */
   var CAB_PRESETS = [
     { hex: "#F4F1EC", name: "Oq" },
-    { hex: "#C9A876", name: "Yog'och" },
+    { hex: "tex:oak", name: "Dub", tex: "oak", tint: "#ffffff", tile: 0.6, rough: 0.55, metal: 0 },
+    { hex: "tex:walnut", name: "Yong'oq", tex: "walnut", tint: "#ffffff", tile: 0.6, rough: 0.55, metal: 0 },
+    { hex: "tex:marbleW", name: "Marmar", tex: "marbleW", tint: "#ffffff", tile: 0.9, rough: 0.25, metal: 0.05 },
     { hex: "#9A9A95", name: "Kulrang" },
     { hex: "#7C8E72", name: "Yashil" },
+    { hex: "#5E6B7A", name: "Ko'k-kulrang" },
+    { hex: "#D9C7A8", name: "Bej" },
     { hex: "#2B2B2B", name: "Qora" }
   ];
   var COUNTER_PRESETS = [
     { hex: "#232527", name: "Qora granit", rough: 0.22, metal: 0.15 },
-    { hex: "#EDEAE3", name: "Oq marmar", rough: 0.18, metal: 0.08 },
-    { hex: "#B58A5A", name: "Yog'och", rough: 0.5, metal: 0 },
-    { hex: "#3A2A1C", name: "To'q yog'och", rough: 0.45, metal: 0 },
+    { hex: "tex:marbleW", name: "Oq marmar", tex: "marbleW", tint: "#ffffff", tile: 0.9, rough: 0.16, metal: 0.08 },
+    { hex: "tex:marbleB", name: "Qora marmar", tex: "marbleB", tint: "#ffffff", tile: 0.9, rough: 0.14, metal: 0.1 },
+    { hex: "tex:oak", name: "Dub", tex: "oak", tint: "#ffffff", tile: 0.6, rough: 0.5, metal: 0 },
+    { hex: "tex:walnut", name: "Yong'oq", tex: "walnut", tint: "#ffffff", tile: 0.6, rough: 0.5, metal: 0 },
+    { hex: "#D9D0C0", name: "Bej kvarts", rough: 0.3, metal: 0.05 },
     { hex: "#6E6B66", name: "Kulrang beton", rough: 0.6, metal: 0.05 }
   ];
+  var TEX_DEFS = {
+    oak: { type: "wood", base: "#c9a066", dark: "#8c6130", light: "#e0be82" },
+    walnut: { type: "wood", base: "#6d4a33", dark: "#35210f", light: "#8a6444" },
+    marbleW: { type: "marble", base: "#efeeea", vein: "#7f8388", vein2: "#c3c5c7" },
+    marbleB: { type: "marble", base: "#18191b", vein: "#c2a064", vein2: "#55585d" }
+  };
+  var TEX_CV = {}, TEX_OBJ = {}, TEX_URL = {};
+  function rnd32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function texCanvas(id) {
+    if (TEX_CV[id]) return TEX_CV[id];
+    var d = TEX_DEFS[id], S = 512, cv = document.createElement("canvas");
+    cv.width = S; cv.height = S;
+    var g = cv.getContext("2d"), R = rnd32(id.length * 7919 + id.charCodeAt(0) * 31 + id.charCodeAt(id.length - 1));
+    g.fillStyle = d.base; g.fillRect(0, 0, S, S);
+    if (d.type === "wood") {
+      for (var i = 0; i < 340; i++) {
+        var x = R() * S, wob = 2 + R() * 6, fr = 0.01 + R() * 0.02, ph = R() * 6.28;
+        g.strokeStyle = R() < 0.5 ? d.dark : d.light; g.globalAlpha = 0.04 + R() * 0.16; g.lineWidth = 0.5 + R() * 2.2;
+        g.beginPath();
+        for (var y = -8; y <= S + 8; y += 8) { var xx = x + Math.sin(y * fr + ph) * wob; if (y < 0) g.moveTo(xx, y); else g.lineTo(xx, y); }
+        g.stroke();
+      }
+      for (var kn = 0; kn < 3; kn++) {
+        var kx = R() * S, ky = R() * S;
+        for (var r = 4; r < 26; r += 4) { g.globalAlpha = 0.1; g.strokeStyle = d.dark; g.lineWidth = 1.2; g.beginPath(); g.ellipse(kx, ky, r * 0.55, r * 1.3, 0, 0, 6.283); g.stroke(); }
+      }
+    } else {
+      for (var c = 0; c < 14; c++) {
+        var cx = R() * S, cy = R() * S, cr = 60 + R() * 140, gr = g.createRadialGradient(cx, cy, 0, cx, cy, cr);
+        gr.addColorStop(0, d.vein2); gr.addColorStop(1, "rgba(0,0,0,0)");
+        g.globalAlpha = 0.1 + R() * 0.14; g.fillStyle = gr; g.fillRect(cx - cr, cy - cr, cr * 2, cr * 2);
+      }
+      for (var v = 0; v < 9; v++) {
+        var px = R() * S, py = R() * S, ang = R() * 6.28, pts = [[px, py]];
+        for (var st = 0; st < 80; st++) { ang += (R() - 0.5) * 0.7; px += Math.cos(ang) * 9; py += Math.sin(ang) * 9; pts.push([px, py]); }
+        var lw = 0.8 + R() * 2.4;
+        [[d.vein2, lw * 3.5, 0.18], [d.vein, lw, 0.55 + R() * 0.3]].forEach(function (pass) {
+          g.strokeStyle = pass[0]; g.lineWidth = pass[1]; g.globalAlpha = pass[2]; g.lineJoin = "round"; g.beginPath();
+          pts.forEach(function (q, qi) { if (qi === 0) g.moveTo(q[0], q[1]); else g.lineTo(q[0], q[1]); });
+          g.stroke();
+        });
+      }
+    }
+    g.globalAlpha = 1;
+    TEX_CV[id] = cv;
+    return cv;
+  }
+  function getTexture(id, horizontal) {
+    var key = id + (horizontal ? "_h" : "");
+    if (TEX_OBJ[key]) return TEX_OBJ[key];
+    var t = new THREE.CanvasTexture(texCanvas(id));
+    t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
+    if (horizontal && TEX_DEFS[id].type === "wood" && t.center) { t.center.set(0.5, 0.5); t.rotation = Math.PI / 2; }
+    TEX_OBJ[key] = t;
+    return t;
+  }
+  function texThumb(id) {
+    if (!TEX_URL[id]) { try { TEX_URL[id] = texCanvas(id).toDataURL("image/jpeg", 0.7); } catch (e) { TEX_URL[id] = ""; } }
+    return TEX_URL[id];
+  }
   function cssVar(name) {
     var v = getComputedStyle(document.documentElement).getPropertyValue(name);
     return (v && v.trim()) || "#999999";
@@ -848,8 +770,8 @@ details .body { padding: 0 16px 16px; }
     g.traverse(function (o) {
       if (o.geometry) o.geometry.dispose();
       if (o.material) {
-        if (Array.isArray(o.material)) o.material.forEach(function (m) { m.dispose(); });
-        else o.material.dispose();
+        if (Array.isArray(o.material)) o.material.forEach(function (m) { if (m.map) m.map.dispose(); m.dispose(); });
+        else { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
       }
     });
   }
@@ -877,11 +799,23 @@ details .body { padding: 0 16px 16px; }
     return cyc[idx % cyc.length];
   }
 
+  /* Teksturani har yoqqa o'lchamga mos (metrga nisbatan) cho'zmasdan qo'yish uchun UV'ni masshtablaydi */
+  function scaleBoxUV(geo, w, h, d, tile) {
+    var uv = geo.attributes && geo.attributes.uv;
+    if (!uv) return;
+    var dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+    for (var f = 0; f < 6; f++) for (var v = 0; v < 4; v++) {
+      var i = f * 4 + v;
+      uv.setXY(i, uv.getX(i) * dims[f][0] / tile, uv.getY(i) * dims[f][1] / tile);
+    }
+    uv.needsUpdate = true;
+  }
   function box3(parent, w, h, d, x, y, z, colorHex, opts) {
     if (w <= 0 || h <= 0 || d <= 0) return;
     opts = opts || {};
     var geo = new THREE.BoxGeometry(w, h, d);
-    var mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: opts.rough != null ? opts.rough : 0.85, metalness: opts.metal != null ? opts.metal : 0.02 });
+    if (opts.map) scaleBoxUV(geo, w, h, d, opts.tile || 0.8);
+    var mat = new THREE.MeshStandardMaterial({ color: colorHex, map: opts.map || null, roughness: opts.rough != null ? opts.rough : 0.85, metalness: opts.metal != null ? opts.metal : 0.02 });
     var m = new THREE.Mesh(geo, mat);
     m.position.set(x + w / 2, y + h / 2, z + d / 2);
     m.castShadow = true; m.receiveShadow = true;
@@ -905,6 +839,93 @@ details .body { padding: 0 16px 16px; }
     return m;
   }
 
+  /* Aqlli modul taqsimoti: umumiy kenglikni standart modul kengliklariga (300/400/450/500/600/800 mm) bo'ladi.
+     Imkon qadar 600 mm modullar, kichiklari chetlarda, kattalari o'rtada. Natija yig'indisi aniq kenglikka teng. */
+  var STD_MODS = [300, 400, 450, 500, 600, 800];
+  var _smCache = {};
+  function smartModules(wm) {
+    var W = Math.round(wm * 1000);
+    if (W <= 0) return [];
+    if (_smCache[W]) return _smCache[W].slice();
+    var res = null, U = 50, maxU = Math.ceil(W / U) + 2;
+    if (W >= 300) {
+      var cost = [0], pv = [];
+      for (var u = 1; u <= maxU; u++) {
+        cost[u] = Infinity;
+        for (var si = 0; si < STD_MODS.length; si++) {
+          var w = STD_MODS[si], k = w / U;
+          if (u - k >= 0 && cost[u - k] < Infinity) {
+            var c = cost[u - k] + 10 + (w === 600 ? 0 : (w === 450 ? 2 : (w === 800 ? 6 : 3)));
+            if (c < cost[u]) { cost[u] = c; pv[u] = w; }
+          }
+        }
+      }
+      var best = null;
+      for (var uu = 1; uu <= maxU; uu++) {
+        if (cost[uu] === Infinity) continue;
+        var dev = Math.abs(uu * U - W) / W;
+        if (dev > 0.06) continue;
+        var tot = cost[uu] + dev * 400;
+        if (!best || tot < best.tot) best = { u: uu, tot: tot };
+      }
+      if (best) {
+        var ws = [], cu = best.u;
+        while (cu > 0) { ws.push(pv[cu]); cu -= pv[cu] / U; }
+        var scale = W / (best.u * U);
+        ws.sort(function (a, b) { return a - b; });
+        var left = [], right = [];
+        ws.forEach(function (v, idx) { if (idx % 2 === 0) left.push(v * scale / 1000); else right.unshift(v * scale / 1000); });
+        res = left.concat(right);
+      }
+    }
+    if (!res) { var n0 = Math.max(1, Math.round(W / 600)); res = []; for (var q = 0; q < n0; q++) res.push(wm / n0); }
+    _smCache[W] = res;
+    return res.slice();
+  }
+  /* Qaysi modullarda g'aladon bo'lishini aniqlaydi: avval plita (varochnaya panel) tagidagi modul, keyin unga eng yaqinlari.
+     Eni >= 350 mm bo'lishi kerak, moyka moduli o'tkazib yuboriladi. preferIdx yo'q bo'lsa, chapdan boshlanadi. */
+  function drawerSetFor(mods, count, noIdx, preferIdx) {
+    var set = {}, need = count ? Math.ceil(count / 3) : 0;
+    var pi = (preferIdx == null || preferIdx < 0) ? -1 : preferIdx;
+    var order = [];
+    for (var i = 0; i < mods.length; i++) order.push(i);
+    order.sort(function (a, b) { return (Math.abs(a - pi) - Math.abs(b - pi)) || (a - b); });
+    for (var k = 0; k < order.length && need > 0; k++) {
+      var j = order[k];
+      if (j === noIdx || mods[j] < 0.35) continue;
+      set[j] = true; need--;
+    }
+    return set;
+  }
+  function labelSprite(text, scaleW) {
+    var cv = document.createElement("canvas"); cv.width = 256; cv.height = 64;
+    var cx = cv.getContext("2d");
+    cx.fillStyle = "rgba(255,255,255,0.92)"; cx.fillRect(0, 8, 256, 48);
+    cx.strokeStyle = "#222"; cx.lineWidth = 2; cx.strokeRect(1, 9, 254, 46);
+    cx.fillStyle = "#111"; cx.font = "bold 34px Arial, sans-serif"; cx.textAlign = "center"; cx.textBaseline = "middle";
+    cx.fillText(text, 128, 33);
+    var tex = new THREE.CanvasTexture(cv);
+    var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    sp.scale.set(scaleW, scaleW / 4, 1);
+    sp.renderOrder = 10;
+    return sp;
+  }
+
+  function ring3(parent, r, pos, colorHex) {
+    var m = new THREE.Mesh(
+      new THREE.RingGeometry(Math.max(0.001, r - 0.004), r, 40),
+      new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+    );
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(pos[0], pos[1] + 0.0006, pos[2]);
+    parent.add(m);
+    return m;
+  }
+  function glow(m, hex) {
+    if (m && m.material) { m.material.emissive = new THREE.Color(hex); m.material.emissiveIntensity = 0.9; }
+    return m;
+  }
+
   /* Ostrov (orolcha) uchun ochiladigan eshik. outward: +1 yoki -1 - eshik qaysi tomonga (Z yo'nalishida) ochilishini bildiradi. */
   function islandDoor(parent, hingeX, hingeZ, h0, hLen, doorW, hingeSide, alongAxis, outward, color, opts) {
     if (doorW <= 0 || hLen <= 0) return;
@@ -922,14 +943,15 @@ details .body { padding: 0 16px 16px; }
     }
     var geo = new THREE.BoxGeometry(w, hLen, d);
     opts = opts || {};
-    var mat = new THREE.MeshStandardMaterial({ color: color, roughness: opts.rough != null ? opts.rough : 0.6, metalness: opts.metal != null ? opts.metal : 0.02 });
+    scaleBoxUV(geo, w, hLen, d, opts.tile || 0.8);
+    var mat = new THREE.MeshStandardMaterial({ color: color, map: opts.map || null, roughness: opts.rough != null ? opts.rough : 0.6, metalness: opts.metal != null ? opts.metal : 0.02 });
     var mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(mx, hLen / 2, mz);
     mesh.castShadow = true; mesh.receiveShadow = true;
     pivot.add(mesh);
     parent.add(pivot);
     var baseSign = alongAxis === "x" ? (hingeSide === "left" ? -1 : 1) : (hingeSide === "left" ? 1 : -1);
-    THREE_STATE.doors.push({ pivot: pivot, sign: baseSign * outward });
+    registerDoor(pivot, mesh, baseSign * outward);
   }
 
   /* O'rtadagi orolcha (ostrov): o'lchami state.islandL/state.islandD orqali sozlanadi, balandligi 850 mm qat'iy.
@@ -940,7 +962,7 @@ details .body { padding: 0 16px 16px; }
     var D = Math.max(0.4, (Number(state.islandD) || 900) * 0.001);
     var H = 0.85, kick = 0.08, recess = 0.035;
     var x0 = cx - L / 2, z0 = cz - D / 2;
-    var cab = { rough: colors.rough, metal: colors.metal };
+    var cab = { rough: colors.rough, metal: colors.metal, map: colors.cabMap, tile: colors.cabTile };
     var shelfColor = shadeColor(colors.cab, -0.1);
     /* korpus (old tomoni "recess" masofaga ichkariga torttirilgan) */
     box3(parent, L, H - kick, D - recess, x0, kick, z0 + recess, colors.cab, cab);
@@ -954,7 +976,7 @@ details .body { padding: 0 16px 16px; }
     /* sokol (kick) */
     box3(parent, L - 0.04, kick, D - 0.04, x0 + 0.02, 0, z0 + 0.02, "#1c1a18", { rough: 0.9, metal: 0, edges: false });
     /* stol usti */
-    box3(parent, L + 0.03, 0.04, D + 0.03, x0 - 0.015, H, z0 - 0.015, colors.counterHex, { rough: colors.counterRough, metal: colors.counterMetal });
+    box3(parent, L + 0.03, 0.04, D + 0.03, x0 - 0.015, H, z0 - 0.015, colors.counterHex, { rough: colors.counterRough, metal: colors.counterMetal, map: colors.counterMap, tile: colors.counterTile });
     /* ikkita eshik, old tomonda (z0 yuzi), bir-biridan uzoqlashib ochiladi */
     var gap = 0.008;
     var halfW = (L - gap * 3) / 2;
@@ -995,7 +1017,7 @@ details .body { padding: 0 16px 16px; }
       return [p[0], y, p[1]];
     }
 
-    var cab = { rough: colors.rough, metal: colors.metal };
+    var cab = { rough: colors.rough, metal: colors.metal, map: colors.cabMap, tile: colors.cabTile };
     var STONE = colors.counterHex, STONE_ROUGH = colors.counterRough, STONE_METAL = colors.counterMetal;
     var STEEL = "#c9cdd1";
     var DARK = "#161514";
@@ -1005,23 +1027,41 @@ details .body { padding: 0 16px 16px; }
     put(0, 0, -0.02, W, H, 0.02, colors.wall, { edges: false, rough: 0.95 });
 
     /* --- Bir qatorni alohida eshik modullariga bo'lib chizadi (chiziqlar aniq ko'rinishi uchun) --- */
-    function doorRow(x0, w, yBottom, hgt, depth, color, skipRanges) {
+    var INTERIOR = "#efe9df";
+    function shelfCount(hgt) { return hgt < 0.45 ? 0 : Math.min(3, Math.floor((hgt - 0.1) / 0.4)); }
+    /* Ichi bo'sh shkaf: yon, tepa va past panellar, orqa devor, tokchalar (eshik ochilganda ichi ko'rinadi) */
+    function carcass(ax0, aw, yb, hg, dp, color, shelves) {
+      var t = 0.018, o = { rough: colors.rough, metal: colors.metal, edges: false, map: colors.cabMap, tile: colors.cabTile }, oi = { rough: 0.75, metal: 0, edges: false };
+      if (aw < 0.1 || hg < 0.1) { put(ax0, yb, 0, aw, hg, dp, color, cab); return; }
+      put(ax0, yb, 0, t, hg, dp, color, o);
+      put(ax0 + aw - t, yb, 0, t, hg, dp, color, o);
+      put(ax0 + t, yb, 0, aw - 2 * t, t, dp, color, o);
+      put(ax0 + t, yb + hg - t, 0, aw - 2 * t, t, dp, color, o);
+      put(ax0 + t, yb + t, 0, aw - 2 * t, hg - 2 * t, 0.008, INTERIOR, oi);
+      for (var k = 1; k <= shelves; k++) {
+        put(ax0 + t, yb + t + k * (hg - 2 * t) / (shelves + 1), 0.01, aw - 2 * t, 0.016, dp - 0.04, INTERIOR, oi);
+      }
+    }
+    /* Bir qatorni aqlli modullarga bo'lib, har biri uchun korpus chizadi. drawerSet - g'aladonli modullar (tokchasiz). */
+    function doorRow(x0, w, yBottom, hgt, depth, color, skipRanges, drawerSet, raiseIdx, raiseBy) {
       if (w <= 0) return;
-      var n = Math.max(1, Math.round(w / 0.6));
-      var mw = w / n;
-      for (var i = 0; i < n; i++) {
-        var mx = x0 + i * mw;
+      var mods = smartModules(w), xs = [], ws = [], xx = x0;
+      for (var i = 0; i < mods.length; i++) {
+        var mw = mods[i];
+        xs.push(xx); ws.push(mw);
         var skip = false;
         (skipRanges || []).forEach(function (r) { if (i === r) skip = true; });
-        if (skip) continue;
-        put(mx + gap / 2, yBottom, 0, mw - gap, hgt, depth, color, cab);
+        var yb2 = yBottom, hg2 = hgt;
+        if (raiseBy && i === raiseIdx) { yb2 += raiseBy; hg2 -= raiseBy; }
+        if (!skip) carcass(xx + gap / 2, mw - gap, yb2, hg2, depth, color, (drawerSet && drawerSet[i]) ? 0 : shelfCount(hg2));
+        xx += mw;
       }
-      return { n: n, mw: mw };
+      return { n: mods.length, mods: mods, xs: xs, ws: ws };
     }
     var gap = 0.006;
 
     /* --- Ochiladigan eshik (ilgak-pivot) --- */
-    function addDoorFront(along0, depth0, h0, hLen, alongLen, color, opts, hingeSide) {
+    function addDoorFront(along0, depth0, h0, hLen, alongLen, color, opts, hingeSide, style) {
       if (alongLen <= 0 || hLen <= 0) return;
       var anchorAlong = hingeSide === "left" ? along0 : along0 + alongLen;
       var p = at(anchorAlong, depth0);
@@ -1030,16 +1070,48 @@ details .body { padding: 0 16px 16px; }
       var thick = 0.016, w, d, mx, mz;
       if (axis === "x") { w = alongLen; d = thick; mx = hingeSide === "left" ? alongLen / 2 : -alongLen / 2; mz = thick / 2; }
       else { w = thick; d = alongLen; mx = thick / 2; mz = hingeSide === "left" ? alongLen / 2 : -alongLen / 2; }
-      var geo = new THREE.BoxGeometry(w, hLen, d);
       opts = opts || {};
-      var mat = new THREE.MeshStandardMaterial({ color: color, roughness: opts.rough != null ? opts.rough : 0.6, metalness: opts.metal != null ? opts.metal : 0.02 });
-      var mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(mx, hLen / 2, mz);
-      mesh.castShadow = true; mesh.receiveShadow = true;
-      pivot.add(mesh);
+      var mesh;
+      if (style === "glassBlack" || style === "glassSilver") {
+        /* oyna profil: alyuminiy ramka + shaffof shisha (ichidagi tokchalar ko'rinadi) */
+        var fcol = style === "glassBlack" ? "#222325" : "#c4c9ce", fwid = 0.024, fth = 0.02;
+        var a0 = hingeSide === "left" ? 0 : -alongLen;
+        var pbox = function (aLo, y, dLo, aLen, hl, dLen, col, isGlass) {
+          var gw = axis === "x" ? aLen : dLen, gd = axis === "x" ? dLen : aLen;
+          var m = new THREE.Mesh(new THREE.BoxGeometry(gw, hl, gd), new THREE.MeshStandardMaterial(isGlass
+            ? { color: col, transparent: true, opacity: 0.3, roughness: 0.05, metalness: 0.2, depthWrite: false }
+            : { color: col, roughness: 0.35, metalness: 0.75 }));
+          var ca = aLo + aLen / 2, cd = dLo + dLen / 2;
+          if (axis === "x") m.position.set(ca, y + hl / 2, cd); else m.position.set(cd, y + hl / 2, ca);
+          m.castShadow = !isGlass; m.receiveShadow = true;
+          pivot.add(m);
+          return m;
+        };
+        pbox(a0, 0, 0, alongLen, fwid, fth, fcol, false);
+        pbox(a0, hLen - fwid, 0, alongLen, fwid, fth, fcol, false);
+        pbox(a0, fwid, 0, fwid, hLen - 2 * fwid, fth, fcol, false);
+        pbox(a0 + alongLen - fwid, fwid, 0, fwid, hLen - 2 * fwid, fth, fcol, false);
+        mesh = pbox(a0 + fwid * 0.5, fwid * 0.5, fth * 0.35, alongLen - fwid, hLen - fwid, fth * 0.3, "#cfe3ee", true);
+      } else {
+        var geo = new THREE.BoxGeometry(w, hLen, d);
+        scaleBoxUV(geo, w, hLen, d, opts.tile || 0.8);
+        var mat = new THREE.MeshStandardMaterial({ color: color, map: opts.map || null, roughness: opts.rough != null ? opts.rough : 0.6, metalness: opts.metal != null ? opts.metal : 0.02 });
+        mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(mx, hLen / 2, mz);
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        pivot.add(mesh);
+      }
+      /* petlyalar (shkaf ichidan ko'rinadigan metall stakanchalar) */
+      if (hLen > 0.25 && alongLen > 0.2) {
+        var hc = (hingeSide === "left" ? 1 : -1) * 0.04;
+        [0.09, hLen - 0.09].forEach(function (hy) {
+          var cup = axis === "x" ? cyl3(pivot, 0.017, 0.008, hc, hy, 0.002, "#aeb4ba", [Math.PI / 2, 0, 0]) : cyl3(pivot, 0.017, 0.008, 0.002, hy, hc, "#aeb4ba", [0, 0, Math.PI / 2]);
+          cup.castShadow = false;
+        });
+      }
       parent.add(pivot);
       var sign = axis === "x" ? (hingeSide === "left" ? -1 : 1) : (hingeSide === "left" ? 1 : -1);
-      THREE_STATE.doors.push({ pivot: pivot, sign: sign });
+      registerDoor(pivot, mesh, sign);
     }
     /* --- Ochiladigan (sirpanib chiqadigan) g'aladon --- */
     function addDrawerFront(along0, depth0, h0, hLen, alongLen, color, opts) {
@@ -1050,67 +1122,202 @@ details .body { padding: 0 16px 16px; }
       if (axis === "x") { w = alongLen; d = thick; } else { w = thick; d = alongLen; }
       var geo = new THREE.BoxGeometry(w, hLen, d);
       opts = opts || {};
-      var mat = new THREE.MeshStandardMaterial({ color: color, roughness: opts.rough != null ? opts.rough : 0.6, metalness: opts.metal != null ? opts.metal : 0.02 });
-      var mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(p[0], h0 + hLen / 2, p[1]);
-      mesh.castShadow = true; mesh.receiveShadow = true;
-      parent.add(mesh);
+      scaleBoxUV(geo, w, hLen, d, opts.tile || 0.8);
+      var mat = new THREE.MeshStandardMaterial({ color: color, map: opts.map || null, roughness: opts.rough != null ? opts.rough : 0.6, metalness: opts.metal != null ? opts.metal : 0.02 });
+      var front = new THREE.Mesh(geo, mat);
+      front.castShadow = true; front.receiveShadow = true;
+      var grp = new THREE.Group();
+      grp.position.set(p[0], h0 + hLen / 2, p[1]);
+      grp.add(front);
+      /* g'aladon qutisi (oq), old panelga bog'langan va u bilan birga chiqadi */
+      var gb = function (ca, cy, cd, la, lh, ld, col, o2) {
+        var gw = axis === "x" ? la : ld, gd = axis === "x" ? ld : la;
+        var m = new THREE.Mesh(new THREE.BoxGeometry(gw, lh, gd), new THREE.MeshStandardMaterial({ color: col, roughness: o2 && o2.rough != null ? o2.rough : 0.7, metalness: o2 && o2.metal != null ? o2.metal : 0 }));
+        if (axis === "x") m.position.set(ca, cy, cd); else m.position.set(cd, cy, ca);
+        m.castShadow = true; m.receiveShadow = true; grp.add(m); return m;
+      };
+      var bw = alongLen - 0.07, bh = Math.max(0.07, Math.min(0.2, hLen * 0.72)), bl = Math.max(0.15, depth0 - 0.07);
+      var by = -hLen / 2 + 0.02, bd0 = -thick / 2 - bl / 2;
+      if (bw > 0.1) {
+        gb(0, by + 0.006, bd0, bw, 0.012, bl, INTERIOR);
+        gb(bw / 2 - 0.006, by + bh / 2, bd0, 0.012, bh, bl, INTERIOR);
+        gb(-bw / 2 + 0.006, by + bh / 2, bd0, 0.012, bh, bl, INTERIOR);
+        gb(0, by + bh / 2, -thick / 2 - bl + 0.006, bw, bh, 0.012, INTERIOR);
+        /* yo'naltiruvchi relslar (korpusga qotirilgan, qimirlamaydi) */
+        var ry = h0 + 0.02 + Math.min(bh, hLen) * 0.45;
+        put(along0 + 0.012, ry, 0.03, 0.012, 0.012, depth0 - 0.07, "#9aa0a5", { rough: 0.3, metal: 0.8, edges: false });
+        put(along0 + alongLen - 0.024, ry, 0.03, 0.012, 0.012, depth0 - 0.07, "#9aa0a5", { rough: 0.3, metal: 0.8, edges: false });
+      }
+      parent.add(grp);
+      var mesh = grp;
       var axisName = axis === "x" ? "z" : "x";
       var base = axisName === "z" ? p[1] : p[0];
-      THREE_STATE.drawers.push({ mesh: mesh, axis: axisName, base: base });
+      registerDrawer(mesh, axisName, base);
     }
+    /* --- Batafsil eshik (ichida detallari bor): yon eshik ("side") yoki pastga ochiladigan duhovka eshigi ("flap").
+       buildFn ichida a.box/a.cylH/a.cylV/a.cylD orqali detallar chiziladi; a0 - eshikning chap chetidan masofa,
+       hrel - eshik pastidan balandlik, d0 - eshik orqasidan oldinga qalinlik. Hammasi eshik bilan birga ochiladi va bosiladi. --- */
+    function addDetailedDoor(along0, depth0, h0, alongLen, hLen, mode, hingeSide, buildFn) {
+      if (alongLen <= 0 || hLen <= 0) return;
+      var anchorOff = (mode === "side" && hingeSide === "right") ? alongLen : 0;
+      var p = at(along0 + anchorOff, depth0);
+      var pivot = new THREE.Group();
+      pivot.position.set(p[0], h0, p[1]);
+      parent.add(pivot);
+      var it;
+      if (mode === "flap") {
+        it = newItem({ kind: "flap", pivot: pivot, rot: axis === "x" ? "x" : "z", sign: axis === "x" ? 1 : -1, angle: 1.45 });
+      } else {
+        it = newItem({ kind: "door", pivot: pivot, rot: "y", sign: axis === "x" ? (hingeSide === "left" ? -1 : 1) : (hingeSide === "left" ? 1 : -1), angle: DOOR_OPEN_ANGLE });
+      }
+      THREE_STATE.doors.push(it);
+      function tag(m) { if (m) m.userData.item = it; return m; }
+      var X = axis === "x";
+      buildFn({
+        box: function (a0, hrel, d0, aLen, hl, dLen, color, o) {
+          o = o || {}; o.edges = false;
+          var a = a0 - anchorOff;
+          return tag(X ? box3(pivot, aLen, hl, dLen, a, hrel, d0, color, o) : box3(pivot, dLen, hl, aLen, d0, hrel, a, color, o));
+        },
+        cylH: function (a, hrel, d, r, len, color) {
+          var a2 = a - anchorOff;
+          return tag(X ? cyl3(pivot, r, len, a2, hrel, d, color, [0, 0, Math.PI / 2]) : cyl3(pivot, r, len, d, hrel, a2, color, [Math.PI / 2, 0, 0]));
+        },
+        cylV: function (a, hrel, d, r, len, color) {
+          var a2 = a - anchorOff;
+          return tag(X ? cyl3(pivot, r, len, a2, hrel, d, color) : cyl3(pivot, r, len, d, hrel, a2, color));
+        },
+        cylD: function (a, hrel, d, r, len, color) {
+          var a2 = a - anchorOff;
+          return tag(X ? cyl3(pivot, r, len, a2, hrel, d, color, [Math.PI / 2, 0, 0]) : cyl3(pivot, r, len, d, hrel, a2, color, [0, 0, Math.PI / 2]));
+        }
+      });
+    }
+    /* Statik (ochilmaydigan) silindr: boshqaruv tugmalari uchun, chuqurlik yo'nalishida */
+    function knob(along, y, depthC, r, len, color) {
+      var q = at(along, depthC);
+      return cyl3(parent, r, len, q[0], y, q[1], color, axis === "x" ? [Math.PI / 2, 0, 0] : [0, 0, Math.PI / 2]);
+    }
+
     /* Bir qatorning modul to'rini qayta hisoblab, har moduliga ochiladigan eshik yoki (agar drawerCount berilsa)
        birinchi modullarga sirpanadigan g'aladonlar qo'yadi - statik korpus ustiga "qoplama" sifatida */
-    function overlayRow(x0, w, yBottom, hgt, depth, color, drawerCount) {
-      if (w <= 0 || hgt <= 0) return;
-      var n = Math.max(1, Math.round(w / 0.6));
-      var mw = w / n;
-      var drawerModules = drawerCount ? Math.min(n, Math.ceil(drawerCount / 3)) : 0;
-      var left = drawerCount || 0;
-      for (var i = 0; i < n; i++) {
-        var mx = x0 + i * mw;
-        if (i < drawerModules) {
+    function overlayRow(x0, w, yBottom0, hgt0, depth, color, drawerCount, noDrawerIdx, raiseIdx, raiseBy, style, preferIdx) {
+      if (w <= 0 || hgt0 <= 0) return;
+      var mods = smartModules(w), dset = drawerSetFor(mods, drawerCount, noDrawerIdx, preferIdx), left = drawerCount || 0, xx = x0;
+      for (var i = 0; i < mods.length; i++) {
+        var mw = mods[i], mx = xx, yBottom = yBottom0, hgt = hgt0;
+        if (raiseBy && i === raiseIdx) { yBottom += raiseBy; hgt -= raiseBy; }
+        xx += mw;
+        if (dset[i]) {
           var cnt = Math.min(3, left) || 1;
           left -= cnt;
           var bandH = hgt / cnt;
           for (var k = 0; k < cnt; k++) {
             addDrawerFront(mx + gap, depth, yBottom + k * bandH + gap, bandH - gap * 2, mw - gap * 2, color, cab);
           }
+        } else if (mw > 0.7) {
+          /* keng modul: ikki qanotli eshik */
+          var half = (mw - gap * 3) / 2;
+          addDoorFront(mx + gap, depth, yBottom, hgt, half, color, cab, "left", style);
+          addDoorFront(mx + gap * 2 + half, depth, yBottom, hgt, half, color, cab, "right", style);
         } else {
-          var hingeSide = i % 2 === 0 ? "left" : "right";
-          addDoorFront(mx + gap, depth, yBottom, hgt, mw - gap * 2, color, cab, hingeSide);
+          addDoorFront(mx + gap, depth, yBottom, hgt, mw - gap * 2, color, cab, i % 2 === 0 ? "left" : "right", style);
         }
       }
     }
 
     /* pastki shkaflar: 100 mm sokol (kick) + undan yuqorida eshiklar */
-    var lowInfo = doorRow(runX0, runW, kick, Math.max(0.05, wi.baseH * mm - kick), baseD, colors.cab, null);
-    overlayRow(runX0, runW, kick, Math.max(0.05, wi.baseH * mm - kick), baseD, colors.cab, wi.main ? (state.drawerCount || 3) : 0);
+    var baseTop = wi.baseH * mm;
+    var lowMods = smartModules(runW), lowStart = [];
+    (function () { var a = runX0; lowMods.forEach(function (m) { lowStart.push(a); a += m; }); })();
+    function modIdxNear(frac, minW, avoid) {
+      var bi = -1, bd = 1e9, bi2 = -1, bd2 = 1e9;
+      lowMods.forEach(function (m, i) {
+        if (i === avoid) return;
+        var dd = Math.abs(lowStart[i] + m / 2 - (runX0 + frac * runW));
+        if (dd < bd2) { bd2 = dd; bi2 = i; }
+        if (m >= minW && dd < bd) { bd = dd; bi = i; }
+      });
+      return bi >= 0 ? bi : bi2;
+    }
+    var sinkIdx0 = (wi.main && runW > 0) ? modIdxNear(0.3, 0.55, -1) : -1;
+    var hobIdx0 = (wi.main && state.hob && runW > 0) ? modIdxNear(0.7, 0.55, sinkIdx0) : -1;
+    /* vytyajka moduli (plita ustidagi yuqori shkaf) 100 mm balandroq turadi */
+    var hoodRaise = (wi.hasUpper && hobIdx0 >= 0 && wi.uH * mm > 0.5) ? 0.1 : 0;
+    var sinkMw = sinkIdx0 >= 0 ? lowMods[sinkIdx0] : 0.6;
+    var sinkCen = sinkIdx0 >= 0 ? lowStart[sinkIdx0] + sinkMw / 2 : runX0;
+    var lowDset = wi.main ? drawerSetFor(lowMods, state.drawerCount || 3, sinkIdx0, hobIdx0) : {};
+    var sinkBW = Math.min(sinkMw * 0.86, 0.58), sinkBD = baseD * 0.72, sinkZ0 = baseD * 0.14;
+    var sinkX0 = sinkCen - sinkBW / 2, sinkX1 = sinkCen + sinkBW / 2, sinkZ1 = sinkZ0 + sinkBD;
+    var lowInfo = doorRow(runX0, runW, kick, Math.max(0.05, baseTop - kick), baseD, colors.cab, sinkIdx0 >= 0 ? [sinkIdx0] : null, lowDset);
+    overlayRow(runX0, runW, kick, Math.max(0.05, baseTop - kick), baseD, colors.cab, wi.main ? (state.drawerCount || 3) : 0, sinkIdx0, -1, 0, undefined, hobIdx0);
     if (runW > 0) put(runX0, 0, 0, runW, kick, baseD - 0.05, PLINTH, { rough: 0.75, edges: false });
-    /* stol usti (tosh) */
-    put(runX0 - 0.015, wi.baseH * mm, 0, runW + 0.03, 0.035, baseD + 0.03, STONE, { rough: STONE_ROUGH, metal: STONE_METAL });
+    if (sinkIdx0 >= 0) {
+      /* moyka moduli: pastki qismi past, ustida havza uchun bo'sh joy, oldida fartuk */
+      var sx = lowStart[sinkIdx0] + gap / 2, sw = sinkMw - gap, bodyTop = baseTop - 0.21;
+      put(sx, kick, 0, sw, bodyTop - kick, baseD, colors.cab, cab);
+      put(sx, bodyTop, baseD - 0.02, sw, 0.21, 0.02, colors.cab, cab);
+      put(sx, bodyTop, 0, 0.018, 0.21, baseD, colors.cab, cab);
+      put(sx + sw - 0.018, bodyTop, 0, 0.018, 0.21, baseD, colors.cab, cab);
+    }
+    /* stol usti (tosh); moyka bo'lsa, havza uchun teshik qoldiriladi */
+    var cL = runX0 - 0.015, cR = runX0 + runW + 0.015, cDp = baseD + 0.03, cOpt = { rough: STONE_ROUGH, metal: STONE_METAL, map: colors.counterMap, tile: colors.counterTile };
+    if (sinkIdx0 >= 0) {
+      put(cL, baseTop, 0, sinkX0 - cL, 0.035, cDp, STONE, cOpt);
+      put(sinkX1, baseTop, 0, cR - sinkX1, 0.035, cDp, STONE, cOpt);
+      put(sinkX0, baseTop, 0, sinkBW, 0.035, sinkZ0, STONE, cOpt);
+      put(sinkX0, baseTop, sinkZ1, sinkBW, 0.035, cDp - sinkZ1, STONE, cOpt);
+    } else {
+      put(cL, baseTop, 0, cR - cL, 0.035, cDp, STONE, cOpt);
+    }
     /* orqa fartuk (backsplash) */
     var backsplashTop = wi.hasUpper ? wi.uBottom * mm : H - 0.02;
     if (backsplashTop > wi.baseH * mm + 0.04) {
-      put(runX0, wi.baseH * mm + 0.035, 0.005, runW, backsplashTop - (wi.baseH * mm + 0.035), 0.012, STONE, { rough: 0.4, metal: 0.05 });
+      put(runX0, wi.baseH * mm + 0.035, 0.005, runW, backsplashTop - (wi.baseH * mm + 0.035), 0.012, STONE, { rough: 0.4, metal: 0.05, map: colors.counterMap, tile: colors.counterTile });
     }
 
     /* yuqori shkaf va antresol (modul chiziqlari bilan) */
     if (wi.hasUpper) {
-      doorRow(runX0, runW, wi.uBottom * mm, wi.uH * mm, upperD, colors.cabUp, null);
-      overlayRow(runX0, runW, wi.uBottom * mm, wi.uH * mm, upperD, colors.cabUp, 0);
-      if (wi.hasAnt) doorRow(runX0, runW, (wi.uBottom + wi.uH) * mm, wi.aH * mm, upperD, colors.cabUp, null);
+      doorRow(runX0, runW, wi.uBottom * mm, wi.uH * mm, upperD, colors.cabUp, null, null, hobIdx0, hoodRaise);
+      overlayRow(runX0, runW, wi.uBottom * mm, wi.uH * mm, upperD, colors.cabUp, 0, -1, hobIdx0, hoodRaise);
+      if (wi.hasAnt) {
+        doorRow(runX0, runW, (wi.uBottom + wi.uH) * mm, wi.aH * mm, upperD, colors.cabUp, null);
+        overlayRow(runX0, runW, (wi.uBottom + wi.uH) * mm, wi.aH * mm, upperD, colors.cabUp, 0, -1, -1, 0, state.upperDoor);
+      }
     }
 
     /* muzlatgich va penal (duhovka/mikrovolnovka ko'rinadigan) */
     tall.forEach(function (u) {
       if (u.kind === "fridge") {
-        var FRIDGE_D = 0.65;
-        put(u.pos, 0, 0, u.w, wi.fh * mm, FRIDGE_D, colors.fridge, { rough: 0.4, metal: 0.35 });
-        var fdy = wi.fh * mm * 0.32;
-        put(u.pos + 0.01, fdy, FRIDGE_D + 0.001, u.w - 0.02, 0.01, 0.004, DARK, { edges: false, rough: 0.4, metal: 0.5 });
+        var FD = 0.6, DT = 0.045, bodyD = FD - DT;
+        var fh = wi.fh * mm, fw = u.w, split = fh * 0.30, baseG = 0.075, li = 0.025;
+        put(u.pos, 0, 0, fw, fh, bodyD, colors.fridge, { rough: 0.4, metal: 0.35 });
+        put(u.pos, 0, bodyD, fw, baseG - 0.004, DT, "#222426", { rough: 0.6, metal: 0.2, edges: false });
+        /* ichki qism (eshik ochilganda ko'rinadi): oq qoplama va shisha tokchalar */
+        put(u.pos + li, split + 0.012, bodyD - 0.002, fw - li * 2, fh - split - 0.03, 0.004, "#f3f5f5", { rough: 0.5, metal: 0, edges: false });
+        for (var fk = 1; fk <= 4; fk++) {
+          put(u.pos + li, split + (fh - split) * fk / 5, bodyD, fw - li * 2, 0.006, 0.022, "#cfe4ec", { rough: 0.1, metal: 0.1, edges: false });
+        }
+        put(u.pos + li, baseG + 0.01, bodyD - 0.002, fw - li * 2, split - baseG - 0.02, 0.004, "#eef2f3", { rough: 0.5, metal: 0, edges: false });
+        [0.3, 0.66].forEach(function (f) {
+          put(u.pos + li + 0.01, baseG + (split - baseG) * f, bodyD, fw - li * 2 - 0.02, (split - baseG) * 0.26, 0.026, "#dfe8eb", { rough: 0.4, metal: 0, edges: false });
+        });
+        var hs = u.side === "right" ? "right" : "left";
+        var fridgeDoor = function (h0, hl, handleLen, handleFromBottom) {
+          var dw = fw - 0.008;
+          addDetailedDoor(u.pos + 0.004, bodyD, h0, dw, hl, "side", hs, function (a) {
+            a.box(0, 0, 0, dw, hl, DT, colors.fridge, { rough: 0.35, metal: 0.4 });
+            var hx = hs === "left" ? dw - 0.05 : 0.05;
+            a.cylV(hx, handleFromBottom + handleLen / 2, DT + 0.03, 0.0085, handleLen, STEEL);
+            a.cylD(hx, handleFromBottom + 0.03, DT + 0.015, 0.006, 0.03, STEEL);
+            a.cylD(hx, handleFromBottom + handleLen - 0.03, DT + 0.015, 0.006, 0.03, STEEL);
+          });
+        };
+        var lowH = split - baseG - 0.004;
+        fridgeDoor(baseG, lowH, 0.22, Math.max(0.02, lowH - 0.3));
+        fridgeDoor(split + 0.004, fh - split - 0.014, 0.42, 0.06);
         /* Muzlatgich ustidagi shkaf: bir xil chuqurlikda (1:1), flush ko'rinish uchun */
-        if (wi.aboveFridge > 0) { doorRow(u.pos, u.w, wi.fh * mm, wi.aboveFridge * mm, FRIDGE_D, colors.cabUp, null); overlayRow(u.pos, u.w, wi.fh * mm, wi.aboveFridge * mm, FRIDGE_D, colors.cabUp, 0); }
+        if (wi.aboveFridge > 0) { doorRow(u.pos, u.w, wi.fh * mm, wi.aboveFridge * mm, FD, colors.cabUp, null); overlayRow(u.pos, u.w, wi.fh * mm, wi.aboveFridge * mm, FD, colors.cabUp, 0); }
       } else {
         put(u.pos, 0, 0, u.w, kick, baseD - 0.05, PLINTH, { rough: 0.75, edges: false });
         var pTop = (wi.H - 30) * mm;
@@ -1123,23 +1330,63 @@ details .body { padding: 0 16px 16px; }
         }
         /* pastki tortma */
         seg(kick, 0.7, function (b, h) { put(u.pos + gap / 2, b, 0, pw - gap, h, baseD, colors.cabUp, cab); addDrawerFront(u.pos + gap, baseD, b + gap, h - gap * 2, pw - gap * 2, colors.cabUp, cab); });
-        /* duhovka */
+        /* duhovka (pastga ochiladigan eshik, ustida boshqaruv paneli) */
         seg(0.7, 1.29, function (b, h) {
-          if (state.penalOven) {
-            put(u.pos + gap / 2, b, 0, pw - gap, h, baseD, DARK, { rough: 0.4, metal: 0.55 });
-            put(u.pos + pw * 0.12, b + h * 0.14, baseD + 0.001, pw * 0.76, h * 0.62, 0.006, "#3a3a3a", { edges: false, rough: 0.15, metal: 0.7 });
-            cyl3(parent, 0.012, 0.012, at(u.pos + pw * 0.5, baseD)[0], b + h - 0.06, at(u.pos + pw * 0.5, baseD)[1], STEEL, [Math.PI / 2, 0, 0]);
+          if (state.penalOven && h > 0.25) {
+            /* duhovka uyasi: yonlari va tagi mebel (shkaf) paneli */
+            var sT = 0.018;
+            put(u.pos + gap / 2, b, 0, pw - gap, sT, baseD + 0.01, colors.cabUp, cab);
+            put(u.pos + gap / 2, b + sT, 0, sT, h - sT, baseD + 0.01, colors.cabUp, cab);
+            put(u.pos + pw - gap / 2 - sT, b + sT, 0, sT, h - sT, baseD + 0.01, colors.cabUp, cab);
+            b = b + sT; h = h - sT;
+            var ow = pw - gap - sT * 2, oa0 = u.pos + gap / 2 + sT, bd = baseD - 0.03, cs = 0.07, cavH = h - cs - 0.07;
+            put(oa0, b, 0, ow, h, bd, "#1f2123", { rough: 0.5, metal: 0.3 });
+            put(oa0 + ow * 0.06, b + 0.04, bd, ow * 0.88, cavH, 0.004, "#383c3f", { rough: 0.6, metal: 0.3, edges: false });
+            [0.3, 0.55].forEach(function (f) { put(oa0 + ow * 0.06, b + 0.04 + cavH * f, bd, ow * 0.88, 0.006, 0.014, "#9aa0a5", { rough: 0.3, metal: 0.8, edges: false }); });
+            put(oa0, b + h - cs, 0, ow, cs, baseD + 0.012, "#1b1c1e", { rough: 0.3, metal: 0.5 });
+            put(oa0 + ow * 0.36, b + h - cs + 0.014, baseD + 0.0115, ow * 0.28, cs - 0.028, 0.002, "#05090b", { rough: 0.1, metal: 0.4, edges: false });
+            glow(put(oa0 + ow * 0.41, b + h - cs / 2 - 0.006, baseD + 0.0138, ow * 0.18, 0.012, 0.001, "#7ee0b4", { rough: 0.2, metal: 0, edges: false }), "#7ee0b4");
+            [0.15, 0.25, 0.75, 0.85].forEach(function (f) { knob(oa0 + ow * f, b + h - cs / 2, baseD + 0.021, 0.015, 0.018, "#c9cdd1"); });
+            var hd = h - cs - 0.004;
+            addDetailedDoor(oa0, bd, b, ow, hd, "flap", null, function (a) {
+              a.box(0, 0, 0, ow, hd, 0.045, "#b4bac0", { rough: 0.3, metal: 0.8 });
+              a.box(ow * 0.07, hd * 0.12, 0.045, ow * 0.86, hd * 0.72, 0.004, "#0c0f10", { rough: 0.05, metal: 0.9 });
+              a.cylH(ow / 2, hd - 0.028, 0.079, 0.0085, ow * 0.82, STEEL);
+              a.cylD(ow * 0.1, hd - 0.028, 0.061, 0.0065, 0.03, STEEL);
+              a.cylD(ow * 0.9, hd - 0.028, 0.061, 0.0065, 0.03, STEEL);
+            });
           } else {
-            put(u.pos + gap / 2, b, 0, pw - gap, h, colors.cabUp, cab);
+            put(u.pos + gap / 2, b, 0, pw - gap, h, baseD, colors.cabUp, cab);
+            addDoorFront(u.pos + gap, baseD, b, h, pw - gap * 2, colors.cabUp, cab, "left");
           }
         });
-        /* mikrovolnovka */
+        /* mikrovolnovka (chap tomondan ochiladigan eshik, o'ngda boshqaruv paneli) */
         seg(1.29, 1.67, function (b, h) {
-          if (state.penalMicro) {
-            put(u.pos + gap / 2, b, 0, pw - gap, h, baseD, "#232323", { rough: 0.35, metal: 0.5 });
-            put(u.pos + pw * 0.10, b + h * 0.12, baseD + 0.001, pw * 0.58, h * 0.76, 0.006, "#3f3f3f", { edges: false, rough: 0.15, metal: 0.7 });
+          if (state.penalMicro && h > 0.2) {
+            /* mikrovolnovka uyasi: yonlari va tagi mebel (shkaf) paneli */
+            var sT2 = 0.018;
+            put(u.pos + gap / 2, b, 0, pw - gap, sT2, baseD + 0.01, colors.cabUp, cab);
+            put(u.pos + gap / 2, b + sT2, 0, sT2, h - sT2, baseD + 0.01, colors.cabUp, cab);
+            put(u.pos + pw - gap / 2 - sT2, b + sT2, 0, sT2, h - sT2, baseD + 0.01, colors.cabUp, cab);
+            b = b + sT2; h = h - sT2;
+            var mw2 = pw - gap - sT2 * 2, ma0 = u.pos + gap / 2 + sT2, mbd = baseD - 0.03, dwid = mw2 * 0.74 - 0.004, pa = ma0 + mw2 * 0.74, pwid = mw2 * 0.26;
+            put(ma0, b, 0, mw2, h, mbd, "#1f2123", { rough: 0.45, metal: 0.3 });
+            put(ma0 + 0.02, b + 0.03, mbd, dwid - 0.04, h - 0.06, 0.004, "#c9ccca", { rough: 0.6, metal: 0, edges: false });
+            put(pa, b, 0, pwid, h, baseD + 0.012, "#1b1c1e", { rough: 0.3, metal: 0.5 });
+            put(pa + pwid * 0.14, b + h * 0.64, baseD + 0.0115, pwid * 0.72, h * 0.22, 0.002, "#05090b", { rough: 0.1, metal: 0.4, edges: false });
+            glow(put(pa + pwid * 0.24, b + h * 0.71, baseD + 0.0138, pwid * 0.52, 0.012, 0.001, "#7ee0b4", { rough: 0.2, metal: 0, edges: false }), "#7ee0b4");
+            knob(pa + pwid * 0.5, b + h * 0.36, baseD + 0.021, 0.019, 0.018, "#c9cdd1");
+            [0.25, 0.5, 0.75].forEach(function (f) { put(pa + pwid * f - 0.008, b + h * 0.12, baseD + 0.012, 0.016, 0.01, 0.003, "#8d9296", { rough: 0.3, metal: 0.5, edges: false }); });
+            addDetailedDoor(ma0, mbd, b, dwid, h, "side", "left", function (a) {
+              a.box(0, 0, 0, dwid, h, 0.04, "#222426", { rough: 0.3, metal: 0.6 });
+              a.box(dwid * 0.08, h * 0.12, 0.04, dwid * 0.78, h * 0.76, 0.004, "#0b0e0f", { rough: 0.05, metal: 0.9 });
+              a.cylV(dwid - 0.035, h / 2, 0.07, 0.007, h * 0.55, STEEL);
+              a.cylD(dwid - 0.035, h / 2 - h * 0.22, 0.055, 0.005, 0.03, STEEL);
+              a.cylD(dwid - 0.035, h / 2 + h * 0.22, 0.055, 0.005, 0.03, STEEL);
+            });
           } else {
-            put(u.pos + gap / 2, b, 0, pw - gap, h, colors.cabUp, cab);
+            put(u.pos + gap / 2, b, 0, pw - gap, h, baseD, colors.cabUp, cab);
+            addDoorFront(u.pos + gap, baseD, b, h, pw - gap * 2, colors.cabUp, cab, "left");
           }
         });
         /* yuqori eshiklar */
@@ -1147,31 +1394,91 @@ details .body { padding: 0 16px 16px; }
       }
     });
 
-    /* plita (gaz/varochnaya panel) va moyka - faqat asosiy devorda */
+    /* o'lcham yozuvlari: har bir modul eni (mm) va umumiy kenglik, balandroqda */
+    if (state.dims !== false && wi.main) {
+      var topY = wi.hasUpper ? (wi.uBottom + wi.uH + (wi.hasAnt ? wi.aH : 0)) * mm : baseTop + 0.12;
+      var lineMat = { rough: 0.9, metal: 0, edges: false };
+      var addLabel = function (along, y, txt, sc) {
+        var q = point3(along, 0.04, y);
+        var sp = labelSprite(txt, sc); sp.position.set(q[0], q[1], q[2]); parent.add(sp);
+      };
+      lowMods.forEach(function (m, i) { addLabel(lowStart[i] + m / 2, topY + 0.09, String(Math.round(m * 1000)), 0.34); });
+      put(runX0, topY + 0.035, 0.04, runW, 0.004, 0.004, "#222", lineMat);
+      tall.forEach(function (u) { addLabel(u.pos + u.w / 2, (u.kind === "fridge" ? wi.fh * mm + (wi.aboveFridge > 0 ? wi.aboveFridge * mm : 0) : (wi.H - 30) * mm) + 0.09, String(Math.round(u.w * 1000)), 0.34); });
+      addLabel(W / 2, topY + 0.24, "Jami: " + Math.round(W * 1000) + " mm", 0.62);
+      put(0, topY + 0.17, 0.04, W, 0.004, 0.004, "#222", lineMat);
+    }
+
+    /* plita (varochnaya panel), vytyajka va moyka - faqat asosiy devorda */
     if (wi.main && runW > 0 && lowInfo) {
-      var n = lowInfo.n, mwu = lowInfo.mw;
-      var sinkIdx = n >= 2 ? Math.round((n - 1) * 0.3) : 0;
-      var hobIdx = state.hob ? (n >= 3 ? Math.round((n - 1) * 0.7) : (n >= 2 ? 1 : 0)) : -1;
-      if (hobIdx === sinkIdx && hobIdx >= 0) hobIdx = Math.min(n - 1, sinkIdx + 1);
+      var sinkIdx = sinkIdx0;
+      var hobIdx = hobIdx0;
+      var cTop = baseTop + 0.035;
 
       if (hobIdx >= 0) {
-        var hcen = runX0 + hobIdx * mwu + mwu / 2;
-        put(hcen - mwu * 0.38, wi.baseH * mm + 0.036, baseD * 0.18, mwu * 0.76, 0.006, baseD * 0.62, "#0e0e0e", { rough: 0.15, metal: 0.5 });
-        [[-0.22, -0.14], [0.22, -0.14], [-0.22, 0.14], [0.22, 0.14]].forEach(function (o) {
-          var pp = point3(hcen + mwu * o[0], baseD * 0.5 + baseD * o[1], wi.baseH * mm + 0.043);
-          cyl3(parent, mwu * 0.09, 0.004, pp[0], pp[1], pp[2], "#3a3a3a", [Math.PI / 2, 0, 0]);
+        var hcen = lowStart[hobIdx] + lowMods[hobIdx] / 2;
+        var hw = Math.min(lowMods[hobIdx] * 0.98, 0.6), hdp = Math.min(baseD * 0.86, 0.52), hx0 = hcen - hw / 2, hz0 = baseD * 0.07;
+        /* shisha-keramik panel va metall ramka */
+        put(hx0, cTop, hz0, hw, 0.008, hdp, "#0b0c0d", { rough: 0.08, metal: 0.6, edges: false });
+        var tr = 0.005, th = 0.0095, tc = { rough: 0.3, metal: 0.8, edges: false };
+        put(hx0, cTop, hz0, hw, th, tr, "#8e9398", tc);
+        put(hx0, cTop, hz0 + hdp - tr, hw, th, tr, "#8e9398", tc);
+        put(hx0, cTop, hz0, tr, th, hdp, "#8e9398", tc);
+        put(hx0 + hw - tr, cTop, hz0, tr, th, hdp, "#8e9398", tc);
+        /* 4 ta konforka (halqalar) */
+        var gy = cTop + 0.0082, rowsZ = [hz0 + hdp * 0.30, hz0 + hdp * 0.63];
+        [[-0.24, 0, 0.07], [0.24, 0, 0.055], [-0.24, 1, 0.055], [0.24, 1, 0.085]].forEach(function (b2) {
+          var q = point3(hcen + hw * b2[0], rowsZ[b2[1]], gy);
+          ring3(parent, b2[2], q, "#9aa0a6");
+          ring3(parent, b2[2] * 0.42, q, "#7d8388");
         });
+        /* sensorli boshqaruv */
+        for (var sk = 0; sk < 5; sk++) {
+          put(hx0 + hw * (0.2 + sk * 0.15) - 0.007, gy, hz0 + hdp - 0.04, 0.014, 0.0015, 0.014, "#d6dade", { rough: 0.3, metal: 0, edges: false });
+        }
+        put(hx0 + hw * 0.2, gy, hz0 + hdp - 0.058, hw * 0.6, 0.0015, 0.003, "#6b7075", { rough: 0.3, metal: 0, edges: false });
+        /* vytyajka: qalinligi 50 mm, o'z moduli ostida (modul 100 mm balandroq) */
         if (wi.hasUpper) {
-          put(hcen - mwu * 0.55, wi.uBottom * mm - 0.001, 0, mwu * 1.1, 0.1, 0.32, STEEL, { rough: 0.35, metal: 0.6 });
-          put(hcen - mwu * 0.22, wi.uBottom * mm - 0.32, 0.1, mwu * 0.44, 0.32, 0.16, STEEL, { rough: 0.35, metal: 0.6 });
+          var hhw = 0.6, hcx = hcen - hhw / 2, hb = wi.uBottom * mm + hoodRaise - 0.05;
+          put(hcx, hb, 0, hhw, 0.05, 0.5, "#b9bec3", { rough: 0.3, metal: 0.75 });
+          put(hcx + 0.02, hb + 0.01, 0.499, hhw - 0.04, 0.03, 0.004, "#101113", { rough: 0.08, metal: 0.7, edges: false });
+          put(hcx + 0.04, hb - 0.0015, 0.08, hhw - 0.08, 0.0025, 0.34, "#7d8388", { rough: 0.4, metal: 0.8, edges: false });
+          [0.25, 0.75].forEach(function (f) {
+            glow(put(hcx + hhw * f - 0.02, hb - 0.0035, 0.4, 0.04, 0.003, 0.025, "#fff3c4", { rough: 0.3, metal: 0, edges: false }), "#ffeeb0");
+          });
         }
       }
 
-      var scen = runX0 + sinkIdx * mwu + mwu / 2;
-      put(scen - mwu * 0.32, wi.baseH * mm + 0.037, baseD * 0.28, mwu * 0.64, 0.004, baseD * 0.5, "#101214", { rough: 0.2, metal: 0.3, edges: false });
-      var fp = point3(scen, baseD * 0.62, wi.baseH * mm + 0.038);
-      cyl3(parent, 0.009, 0.14, fp[0], fp[1] + 0.07, fp[2], STEEL, [0, 0, 0]);
-      cyl3(parent, 0.009, 0.09, fp[0], fp[1] + 0.155, fp[2] - 0.045, STEEL, [Math.PI / 2.4, 0, 0]);
+      if (sinkIdx >= 0) {
+        /* moyka: zanglamaydigan po'lat havza, ramka, drenaj va jo'mrak */
+        var wallC = "#b9bec3", floorC = "#aab0b6", bt = 0.012, wy0 = baseTop - 0.19, wh = cTop - wy0, mt = { rough: 0.3, metal: 0.8, edges: false };
+        put(sinkX0, wy0, sinkZ0, sinkBW, 0.012, sinkBD, floorC, mt);
+        put(sinkX0, wy0, sinkZ0, sinkBW, wh, bt, wallC, mt);
+        put(sinkX0, wy0, sinkZ1 - bt, sinkBW, wh, bt, wallC, mt);
+        put(sinkX0, wy0, sinkZ0, bt, wh, sinkBD, wallC, mt);
+        put(sinkX1 - bt, wy0, sinkZ0, bt, wh, sinkBD, wallC, mt);
+        var dq = point3(sinkCen, (sinkZ0 + sinkZ1) / 2, wy0 + 0.014);
+        cyl3(parent, 0.03, 0.004, dq[0], dq[1], dq[2], "#2a2c2e");
+        var rw = 0.02, rh = 0.006;
+        put(sinkX0 - rw, cTop, sinkZ0 - rw, sinkBW + rw * 2, rh, rw, wallC, mt);
+        put(sinkX0 - rw, cTop, sinkZ1, sinkBW + rw * 2, rh, rw, wallC, mt);
+        put(sinkX0 - rw, cTop, sinkZ0, rw, rh, sinkBD, wallC, mt);
+        put(sinkX1, cTop, sinkZ0, rw, rh, sinkBD, wallC, mt);
+        /* jo'mrak (gusek shaklida) */
+        var fgp = point3(sinkCen, 0.055, cTop);
+        var fg = new THREE.Group();
+        fg.position.set(fgp[0], fgp[1], fgp[2]);
+        fg.rotation.y = axis === "x" ? -Math.PI / 2 : 0;
+        parent.add(fg);
+        var R = 0.085, nh = 0.29;
+        cyl3(fg, 0.024, 0.02, 0, 0.01, 0, STEEL);
+        cyl3(fg, 0.0115, nh - 0.02, 0, 0.02 + (nh - 0.02) / 2, 0, STEEL);
+        var tor = new THREE.Mesh(new THREE.TorusGeometry(R, 0.0105, 10, 24, Math.PI / 2), new THREE.MeshStandardMaterial({ color: STEEL, roughness: 0.25, metalness: 0.8 }));
+        tor.rotation.z = Math.PI / 2; tor.position.set(R, nh, 0); tor.castShadow = true; fg.add(tor);
+        cyl3(fg, 0.0105, 0.07, R + 0.035, nh + R, 0, STEEL, [0, 0, Math.PI / 2]);
+        cyl3(fg, 0.0135, 0.04, R + 0.07, nh + R - 0.02, 0, STEEL);
+        cyl3(fg, 0.006, 0.075, 0, 0.1, 0.045, STEEL, [Math.PI / 2, 0, 0]);
+      }
     }
   }
 
@@ -1215,6 +1522,43 @@ details .body { padding: 0 16px 16px; }
     controls.minDistance = 0.8;
     controls.maxDistance = 20;
 
+    /* --- Bosib ochish: bitta eshik/tortmani bosganda faqat o'sha ochiladi (Bazis kabi) --- */
+    var rc = new THREE.Raycaster(), ndc = new THREE.Vector2();
+    function hitItem(e) {
+      if (!THREE_STATE.group) return null;
+      var r = renderer.domElement.getBoundingClientRect();
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      rc.setFromCamera(ndc, camera);
+      var hits = rc.intersectObject(THREE_STATE.group, true);
+      for (var i = 0; i < hits.length; i++) {
+        var o = hits[i].object;
+        if (!o.isMesh) continue;
+        return (o.userData && o.userData.item) || null;
+      }
+      return null;
+    }
+    var dn = null;
+    renderer.domElement.addEventListener("pointerdown", function (e) {
+      dn = e.isPrimary ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
+    });
+    renderer.domElement.addEventListener("pointerup", function (e) {
+      if (!dn || !e.isPrimary) { dn = null; return; }
+      var moved = Math.abs(e.clientX - dn.x) > 6 || Math.abs(e.clientY - dn.y) > 6 || Date.now() - dn.t > 500;
+      dn = null;
+      if (moved) return;
+      var it = hitItem(e);
+      if (it) { it.t = it.t ? 0 : 1; syncDoorsLabel(); }
+    });
+    var hoverBusy = false;
+    renderer.domElement.addEventListener("pointermove", function (e) {
+      if (e.pointerType !== "mouse" || hoverBusy) return;
+      hoverBusy = true;
+      requestAnimationFrame(function () {
+        hoverBusy = false;
+        renderer.domElement.style.cursor = hitItem(e) ? "pointer" : "";
+      });
+    });
+
     THREE_STATE.renderer = renderer;
     THREE_STATE.scene = scene;
     THREE_STATE.camera = camera;
@@ -1239,10 +1583,7 @@ details .body { padding: 0 16px 16px; }
   }
 
   function onThreeFailed() {
-    if ($("threeNote")) $("threeNote").textContent = "3D ko'rinish yuklanmadi (internet yo'q yoki brauzer qo'llamaydi). 2D chizmadan foydalaning.";
-    Array.prototype.forEach.call(document.querySelectorAll('[data-view="3d"]'), function (b) { b.disabled = true; });
-    state.view = "2d"; save();
-    syncUI(); update();
+    if ($("threeNote")) $("threeNote").textContent = "3D ko'rinish yuklanmadi (internet yo'q yoki brauzer WebGL'ni qo'llamaydi). Narx hisobi baribir ishlaydi.";
   }
 
   function build3D() {
@@ -1264,13 +1605,18 @@ details .body { padding: 0 16px 16px; }
     CONFIG.materials.forEach(function (m, i) { if (m.id === state.materialView) { mat = m; matIdx = i; } });
     var fin = finishFor(mat, matIdx);
     var counterPreset = COUNTER_PRESETS.filter(function (p) { return p.hex === state.counterColor; })[0] || COUNTER_PRESETS[0];
+    var cabPreset = CAB_PRESETS.filter(function (p) { return p.hex === state.cabColor; })[0] || null;
+    var cabBase = cabPreset ? (cabPreset.tex ? cabPreset.tint : cabPreset.hex) : (state.cabColor || fin.base);
     var colors = {
       /* 3D sahnadagi ranglar har doim real dunyoga mos qat'iy ranglar - qurilmaning qorong'i/yorug' rejimiga
          bog'liq EMAS, aks holda devor, stol usti va plita ranglari noto'g'ri ko'rinib qolar edi.
          Mebel va stol usti rangi mijoz tanlagan 5 ta variantdan biriga mos keladi (state.cabColor/counterColor). */
-      wall: "#EFE8DA",
-      cab: state.cabColor || fin.base, cabUp: shadeColor(state.cabColor || fin.base, 0.14), rough: fin.rough, metal: fin.metal,
-      counterHex: counterPreset.hex, counterRough: counterPreset.rough, counterMetal: counterPreset.metal,
+      wall: "#D9CFBC",
+      cab: cabBase, cabUp: shadeColor(cabBase, 0.14),
+      rough: cabPreset && cabPreset.rough != null ? cabPreset.rough : fin.rough, metal: cabPreset && cabPreset.metal != null ? cabPreset.metal : fin.metal,
+      cabMap: cabPreset && cabPreset.tex ? getTexture(cabPreset.tex, false) : null, cabTile: cabPreset && cabPreset.tile ? cabPreset.tile : 0.8,
+      counterHex: counterPreset.tex ? counterPreset.tint : counterPreset.hex, counterRough: counterPreset.rough, counterMetal: counterPreset.metal,
+      counterMap: counterPreset.tex ? getTexture(counterPreset.tex, true) : null, counterTile: counterPreset.tile || 0.9,
       fridge: "#E6E2DD", muted: "#8A8E92", ink: "#1B1A18"
     };
 
@@ -1299,7 +1645,7 @@ details .body { padding: 0 16px 16px; }
     }
 
     var floorGeo = new THREE.PlaneGeometry(maxX + 1.4, maxZ + 1.4);
-    var floorMat = new THREE.MeshStandardMaterial({ color: 0xe9e2d3, roughness: 0.95 });
+    var floorMat = new THREE.MeshStandardMaterial({ color: 0xcfc7b6, roughness: 0.95 });
     var floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(maxX / 2 - 0.3, 0, maxZ / 2 - 0.3);
@@ -1320,17 +1666,13 @@ details .body { padding: 0 16px 16px; }
     }
     THREE_STATE.controls.update();
     applyDoorState();
+    syncDoorsLabel();
     THREE_STATE.renderer.render(scene, THREE_STATE.camera);
   }
 
   function animateThree() {
     if (!THREE_STATE.ready || state.view !== "3d") { THREE_STATE.raf = null; return; }
-    if (THREE_STATE.doorProgress !== THREE_STATE.doorTarget) {
-      var diff = THREE_STATE.doorTarget - THREE_STATE.doorProgress;
-      THREE_STATE.doorProgress += diff * 0.15;
-      if (Math.abs(diff) < 0.003) THREE_STATE.doorProgress = THREE_STATE.doorTarget;
-      applyDoorState();
-    }
+    if (stepItems()) applyDoorState();
     THREE_STATE.controls.update();
     THREE_STATE.renderer.render(THREE_STATE.scene, THREE_STATE.camera);
     THREE_STATE.raf = requestAnimationFrame(animateThree);
@@ -1365,8 +1707,27 @@ details .body { padding: 0 16px 16px; }
     var r = { walls: walls, net: net, bad: isBad(walls) };
 
     r.counterLen = net / 1000;
-    r.useCounter = state.counterOn && P.counterPerM > 0;
-    r.counter = r.useCounter ? rnd(r.counterLen * P.counterPerM) : 0;
+    var cTypes = CONFIG.counterTypes || [];
+    var ctype = cTypes.filter(function (t) { return t.id === state.counterType; })[0] || cTypes[0] || null;
+    r.counterType = ctype;
+    r.useCounter = state.counterOn && (ctype ? ctype.perM > 0 : P.counterPerM > 0);
+    r.counter = r.useCounter ? rnd(r.counterLen * (ctype ? ctype.perM : P.counterPerM)) : 0;
+
+    /* orolcha: korpus + stol usti, ikkalasi ham uzunlik (metr) bo'yicha; stol usti tanlangan tur narxida */
+    r.island = 0; r.islandCab = 0; r.islandTop = 0;
+    if (state.island) {
+      var iL = Math.max(0.4, (Number(state.islandL) || 1200) / 1000), iD = Math.max(0.4, (Number(state.islandD) || 900) / 1000);
+      r.islandCab = P.islandPerM > 0 ? rnd(iL * P.islandPerM) : 0;
+      r.islandTop = rnd(iL * (ctype ? ctype.perM : (P.counterPerM || 0)));
+      r.island = r.islandCab + r.islandTop;
+    }
+
+    /* oyna profil: faqat antresol eshigi yuzasiga qo'shimcha narx */
+    r.glassArea = 0; r.glass = 0;
+    if ((state.upperDoor === "glassBlack" || state.upperDoor === "glassSilver") && P.glassPerKv > 0) {
+      walls.forEach(function (w) { if (w.hasAnt) r.glassArea += (w.net / 1000) * (w.aH / 1000); });
+      r.glass = rnd(r.glassArea * P.glassPerKv);
+    }
 
     var ex = 0; r.extraNames = [];
     CONFIG.extras.forEach(function (e) {
@@ -1380,7 +1741,7 @@ details .body { padding: 0 16px 16px; }
     r.drawerExtraCount = Math.max(0, r.drawerCount - drawerBase);
     r.drawerExtra = (P.drawerPrice > 0) ? rnd(r.drawerExtraCount * P.drawerPrice) : 0;
 
-    var addOns = r.counter + r.extras + r.install + r.drawerExtra;
+    var addOns = r.counter + r.island + r.glass + r.extras + r.install + r.drawerExtra;
     r.materials = CONFIG.materials.map(function (mat) {
       var furniture = rnd(low * mat.kvLow + up * mat.kvUp + pen * mat.kvPenal);
       var total = r.bad ? 0 : furniture + addOns;
@@ -1417,7 +1778,9 @@ details .body { padding: 0 16px 16px; }
       r.materials.forEach(function (m) {
         rows += row("Mebel (" + esc(m.name) + ")", "", som(m.furniture));
       });
-      if (r.useCounter) rows += row("Stol usti", r.counterLen.toFixed(2) + " m", som(r.counter));
+      if (r.useCounter) rows += row("Stol usti" + (r.counterType ? " (" + esc(r.counterType.name) + ")" : ""), r.counterLen.toFixed(2) + " m", som(r.counter));
+      if (r.island > 0) rows += row("Orolcha", fmt(state.islandL) + " x " + fmt(state.islandD) + " mm", som(r.island));
+      if (r.glass > 0) rows += row("Oyna profil (antresol)", r.glassArea.toFixed(2) + " kv", som(r.glass));
       if (r.drawerExtra > 0) rows += row("Qo'shimcha g'aladonlar", "+" + r.drawerExtraCount + " ta", som(r.drawerExtra));
       if (r.extraNames.length) rows += row("Qo'shimchalar", esc(r.extraNames.join(", ")), som(r.extras));
       if (r.install > 0) rows += row("O'rnatish", "", som(r.install));
@@ -1461,7 +1824,7 @@ details .body { padding: 0 16px 16px; }
       barText = "≈ " + som(r.materials[0].total);
     }
     $("barTotal").textContent = barText;
-    draw();
+    fitNote();
     if (state.view === "3d" && THREE_STATE.ready) build3D();
     save();
   }
@@ -1479,8 +1842,14 @@ details .body { padding: 0 16px 16px; }
         '<button type="button" id="drawerPlus" aria-label="Ko\'paytirish">+</button>' +
         '</div></div>';
     }
-    if (P.counterPerM > 0) {
-      h += '<label class="check"><input type="checkbox" id="counterOn"> <span>Stol usti<small>1 metriga ' + fmt(P.counterPerM) + " so'm</small></span></label>";
+    var cTypesUI = CONFIG.counterTypes || [];
+    if (cTypesUI.length || P.counterPerM > 0) {
+      h += '<label class="check"><input type="checkbox" id="counterOn"> <span>Stol usti<small>' + (cTypesUI.length ? "Narxi turiga va uzunligiga (metr) qarab hisoblanadi" : "1 metriga " + fmt(P.counterPerM) + " so'm") + "</small></span></label>";
+      if (cTypesUI.length) {
+        h += '<div class="field" id="counterTypeWrap"><label for="counterType">Stol usti turi</label><select id="counterType">' +
+          cTypesUI.map(function (t) { return '<option value="' + esc(t.id) + '">' + esc(t.name) + " — " + fmt(t.perM) + " so'm/metr</option>"; }).join("") +
+          "</select></div>";
+      }
     }
     CONFIG.extras.forEach(function (e) {
       h += '<label class="check"><input type="checkbox" data-ex="' + esc(e.id) + '"> <span>' + esc(e.name) + "<small>+ " + fmt(e.price) + " so'm</small></span></label>";
@@ -1503,6 +1872,13 @@ details .body { padding: 0 16px 16px; }
       $("drawerPlus").addEventListener("click", function () { state.drawerCount++; syncDrawerUI(); save(); update(); });
     }
     if ($("counterOn")) $("counterOn").checked = !!state.counterOn;
+    if ($("counterType")) {
+      if (!cTypesUI.some(function (t) { return t.id === state.counterType; })) state.counterType = cTypesUI[0].id;
+      $("counterType").value = state.counterType;
+      $("counterTypeWrap").hidden = !state.counterOn;
+    }
+    if ($("islandHint")) $("islandHint").textContent = "Balandligi 850 mm" + (P.islandPerM > 0 ? ". Narxi: korpus 1 metriga " + fmt(P.islandPerM) + " so'm + stol usti 1 metriga tanlangan tur narxida" : "");
+    if ($("glassHint") && P.glassPerKv > 0) $("glassHint").textContent = "Oyna profil: antresol eshigi yuzasiga +" + fmt(P.glassPerKv) + " so'm/kv";
     if ($("installOn")) $("installOn").checked = !!state.installOn;
     Array.prototype.forEach.call(document.querySelectorAll("[data-ex]"), function (c) {
       c.checked = !!state.sel[c.getAttribute("data-ex")];
@@ -1528,21 +1904,18 @@ details .body { padding: 0 16px 16px; }
       if (state.penalPos === "side") { state.penalPos = "right"; $("penalPos").value = "right"; }
     }
 
-    Array.prototype.forEach.call(document.querySelectorAll("[data-view]"), function (b) {
-      b.setAttribute("aria-pressed", b.getAttribute("data-view") === state.view ? "true" : "false");
-    });
-    $("threeBox").hidden = state.view !== "3d";
-    $("planBox").hidden = state.view !== "2d";
-    $("matViewWrap").hidden = state.view !== "3d" || CONFIG.materials.length < 2;
-    $("colorPickWrap").hidden = state.view !== "3d";
-    if (state.view === "3d") syncColorPickers();
-    if (state.view === "3d") activate3D(); else pause3D();
+    state.view = "3d";
+    $("matViewWrap").hidden = CONFIG.materials.length < 2;
+    $("colorPickWrap").hidden = false;
+    syncColorPickers();
+    activate3D();
   }
 
   function renderSwatches(containerId, presets, current) {
     $(containerId).innerHTML = presets.map(function (p) {
       var sel = p.hex === current;
-      return '<button type="button" class="swatch' + (sel ? " sel" : "") + '" data-hex="' + p.hex + '" style="background:' + p.hex + '" aria-label="' + esc(p.name) + '" aria-pressed="' + (sel ? "true" : "false") + '" title="' + esc(p.name) + '"></button>';
+      var bg = p.tex ? 'background:url(' + texThumb(p.tex) + ') center/cover' : 'background:' + p.hex;
+      return '<button type="button" class="swatch' + (sel ? " sel" : "") + '" data-hex="' + p.hex + '" style="' + bg + '" aria-label="' + esc(p.name) + '" aria-pressed="' + (sel ? "true" : "false") + '" title="' + esc(p.name) + '"></button>';
     }).join("");
   }
   function syncColorPickers() {
@@ -1595,6 +1968,8 @@ details .body { padding: 0 16px 16px; }
     $("penalOven").checked = state.penalOven;
     $("penalMicro").checked = state.penalMicro;
     $("island").checked = state.island;
+    $("showDims").checked = state.dims !== false;
+    $("upperDoor").value = state.upperDoor || "plain";
     $("islandL").value = state.islandL;
     $("islandD").value = state.islandD;
     $("cname").value = state.name || "";
@@ -1611,12 +1986,6 @@ details .body { padding: 0 16px 16px; }
   Array.prototype.forEach.call(document.querySelectorAll("[data-shape]"), function (b) {
     b.addEventListener("click", function () { state.shape = b.getAttribute("data-shape"); syncUI(); update(); });
   });
-  Array.prototype.forEach.call(document.querySelectorAll("[data-view]"), function (b) {
-    b.addEventListener("click", function () {
-      if (b.disabled) return;
-      state.view = b.getAttribute("data-view"); save(); syncUI(); update();
-    });
-  });
   $("totals").addEventListener("click", function (e) {
     var btn = e.target.closest ? e.target.closest("[data-mat]") : null;
     if (!btn) return;
@@ -1624,10 +1993,21 @@ details .body { padding: 0 16px 16px; }
     save();
     update();
   });
+  $("upperDoor").addEventListener("change", function () {
+    state.upperDoor = $("upperDoor").value; save();
+    update();
+  });
+  $("showDims").addEventListener("change", function () {
+    state.dims = $("showDims").checked; save();
+    if (state.view === "3d" && THREE_STATE.ready) build3D();
+  });
   if ($("doorsToggle")) {
     $("doorsToggle").addEventListener("click", function () {
-      THREE_STATE.doorTarget = THREE_STATE.doorTarget ? 0 : 1;
-      this.textContent = THREE_STATE.doorTarget ? "Eshik va tortmalarni yopish" : "Eshik va tortmalarni ochish";
+      var items = allItems();
+      var allOpen = items.length > 0 && items.every(function (it) { return it.t === 1; });
+      THREE_STATE.doorTarget = allOpen ? 0 : 1;
+      items.forEach(function (it) { it.t = THREE_STATE.doorTarget; });
+      syncDoorsLabel();
     });
   }
   [["w", "wr"], ["h", "hr"], ["w2", "w2r"]].forEach(function (pair) {
@@ -1646,7 +2026,8 @@ details .body { padding: 0 16px 16px; }
   });
   $("choices").addEventListener("change", function (ev) {
     var t = ev.target;
-    if (t.id === "counterOn") state.counterOn = t.checked;
+    if (t.id === "counterOn") { state.counterOn = t.checked; if ($("counterTypeWrap")) $("counterTypeWrap").hidden = !t.checked; }
+    else if (t.id === "counterType") state.counterType = t.value;
     else if (t.id === "installOn") state.installOn = t.checked;
     else if (t.getAttribute("data-ex")) state.sel[t.getAttribute("data-ex")] = t.checked;
     update();
@@ -1684,8 +2065,12 @@ details .body { padding: 0 16px 16px; }
       L.push("Penal: " + posLabel(state.penalPos) + (inside.length ? ", " + inside.join(" va ") : ""));
     }
     L.push("Varochnaya panel va vytyajka: " + (state.hob ? "bor" : "yo'q"));
+    if (state.upperDoor === "glassBlack" || state.upperDoor === "glassSilver") L.push("Antresol eshigi: oyna profil (" + (state.upperDoor === "glassBlack" ? "qora" : "kumush") + " alyuminiy" + (r.glass > 0 ? ", " + r.glassArea.toFixed(2) + " kv, +" + som(r.glass) : "") + ")");
     L.push("G'aladonlar soni: " + r.drawerCount + " ta" + (r.drawerExtra > 0 ? " (+" + r.drawerExtraCount + " ta, +" + som(r.drawerExtra) + ")" : ""));
-    if (CONFIG.prices.counterPerM > 0) L.push("Stol usti: " + (r.useCounter ? "kerak" : "kerak emas"));
+    if ((CONFIG.counterTypes && CONFIG.counterTypes.length) || CONFIG.prices.counterPerM > 0) {
+      L.push("Stol usti: " + (r.useCounter ? (r.counterType ? r.counterType.name + " (" + r.counterLen.toFixed(2) + " m, " + som(r.counter) + ")" : "kerak") : "kerak emas"));
+    }
+    if (r.island > 0) L.push("Orolcha: " + state.islandL + " x " + state.islandD + " x 850 mm (" + som(r.island) + ")");
     if (r.extraNames.length) L.push("Qo'shimchalar: " + r.extraNames.join(", "));
     L.push("");
     if (r.materials.length > 1) {
@@ -1769,14 +2154,22 @@ details .body { padding: 0 16px 16px; }
     var text = orderText(r, name, phone, note);
     var btn = $("send");
 
-    if (CONFIG.botToken && CONFIG.chatId && typeof fetch === "function") {
+    if ((CONFIG.orderUrl || (CONFIG.botToken && CONFIG.chatId)) && typeof fetch === "function") {
       btn.disabled = true;
       msg("Yuborilmoqda...");
-      fetch("https://api.telegram.org/bot" + CONFIG.botToken + "/sendMessage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: CONFIG.chatId, text: text })
-      }).then(function (res) { return res.json(); }).then(function (d) {
+      /* orderUrl (Cloudflare Worker) berilgan bo'lsa, bot tokeni brauzerga umuman chiqmaydi */
+      var req = CONFIG.orderUrl
+        ? fetch(CONFIG.orderUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name, phone: phone, note: note, text: text })
+          })
+        : fetch("https://api.telegram.org/bot" + CONFIG.botToken + "/sendMessage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: CONFIG.chatId, text: text })
+          });
+      req.then(function (res) { return res.json(); }).then(function (d) {
         btn.disabled = false;
         if (d && d.ok) { done(name, text); }
         else { throw new Error("fail"); }
@@ -1855,60 +2248,108 @@ details .body { padding: 0 16px 16px; }
     return isFinite(n) ? n : 0;
   }
 
+  /* Jadval tuzilishi: A ustun - nom, B ustun - qiymat. "#" bilan boshlangan va qiymati bo'sh qatorlar o'qilmaydi.
+     Aniq nomlar (katta-kichik harf va apostrof ahamiyatsiz):
+       Material 1 nomi / Material 1 pastki / Material 1 yuqori / Material 1 penal   (1..8)
+       Stol usti 1 nomi / Stol usti 1 narxi                                         (1..8, 1 metr narxi)
+       Orolcha (1 metr), Oyna profil (1 kv), G'aladon: qo'shimcha narxi / standart soni / maksimal soni,
+       O'rnatish, Jihoz: <nomi>, Telefon, Telegram
+     Eski yozuvlar ("Pastki (Akril)", "Qo'shimcha: Moyka" va h.k.) ham ishlayveradi.
+     Bot tokeni va chat ID jadvaldan OLINMAYDI (jadval internetda ochiq bo'ladi). */
   function sheetToConfig(rows) {
-    /* "Pastki", "Yuqori", "Penal" - birinchi materialga tegishli.
-       "Pastki (Akril)", "Yuqori (Laminat)" kabi qavs ichida material nomi bo'lsa,
-       o'sha nomdagi (yoki id'dagi) materialga tegishli bo'ladi. */
-    var out = { prices: {}, extras: [], materials: {} }, found = false;
+    var out = { prices: {}, extras: [], materials: {}, matList: {}, ctList: {} }, found = false;
+    function ent(map, n) { if (!map[n]) map[n] = {}; return map[n]; }
     rows.forEach(function (r) {
       if (!r || r.length < 2) return;
-      var label = String(r[0] || "").trim(), val = String(r[1] || "").trim();
-      if (!label) return;
-      var k = normKey(label);
-      if (k.indexOf("qoshimcha") === 0) {
+      var label = String(r[0] || "").trim(), val = String(r[1] == null ? "" : r[1]).trim();
+      if (!label || label.charAt(0) === "#") return;
+      var k = normKey(label), m;
+      if ((m = k.match(/^material (\d+) (nomi|nom|pastki|yuqori|penal)/))) {
+        var me = ent(out.matList, Number(m[1]));
+        if (m[2] === "nomi" || m[2] === "nom") { if (val) { me.name = val; found = true; } }
+        else if (val !== "") { me[m[2] === "pastki" ? "kvLow" : (m[2] === "yuqori" ? "kvUp" : "kvPenal")] = digitsOnly(val); found = true; }
+      } else if ((m = k.match(/^stol usti (\d+) (nomi|nom|narxi|narx)/))) {
+        var ce = ent(out.ctList, Number(m[1]));
+        if (m[2].indexOf("nom") === 0) { if (val) { ce.name = val; found = true; } }
+        else if (val !== "") { ce.perM = digitsOnly(val); found = true; }
+      } else if (k.indexOf("orolcha") === 0) { if (val !== "") { out.prices.islandPerM = digitsOnly(val); found = true; } }
+      else if (k.indexOf("oyna profil") === 0) { if (val !== "") { out.prices.glassPerKv = digitsOnly(val); found = true; } }
+      else if (k.indexOf("galadon") === 0) {
+        if (val === "") return;
+        if (k.indexOf("standart") >= 0) out.prices.drawerBase = digitsOnly(val);
+        else if (k.indexOf("maksimal") >= 0) out.prices.drawerMax = digitsOnly(val);
+        else out.prices.drawerPrice = digitsOnly(val);
+        found = true;
+      } else if (k.indexOf("ornatish") === 0) { if (val !== "") { out.prices.install = digitsOnly(val); found = true; } }
+      else if (k.indexOf("jihoz") === 0 || k.indexOf("qoshimcha") === 0) {
         var ci = label.indexOf(":");
-        var name = ci >= 0 ? label.slice(ci + 1).trim() : label.replace(/^qo.?shimcha\s*/i, "").trim();
-        if (name) {
-          out.extras.push({ id: "x" + out.extras.length + "_" + normKey(name).replace(/[^a-z0-9]/g, ""), name: name, price: digitsOnly(val) });
-          found = true;
-        }
+        var name = ci >= 0 ? label.slice(ci + 1).trim() : label.replace(/^(qo.?shimcha|jihoz)\s*/i, "").trim();
+        if (name && val !== "") { out.extras.push({ name: name, price: digitsOnly(val) }); found = true; }
       } else if (k.indexOf("pastki") >= 0 || k.indexOf("yuqori") >= 0 || k.indexOf("penal") >= 0) {
+        /* eski usul: "Pastki", "Pastki (Akril)" */
         var field = k.indexOf("pastki") >= 0 ? "kvLow" : (k.indexOf("yuqori") >= 0 ? "kvUp" : "kvPenal");
         var mm = label.match(/\(([^)]+)\)/);
         var matKey = mm ? normKey(mm[1]) : "__birinchi__";
         if (!out.materials[matKey]) out.materials[matKey] = {};
         out.materials[matKey][field] = digitsOnly(val);
         found = true;
-      } else if (k.indexOf("stol usti") >= 0) { out.prices.counterPerM = digitsOnly(val); found = true; }
-      else if (k.indexOf("ornatish") >= 0) { out.prices.install = digitsOnly(val); found = true; }
-      else if (k.indexOf("telefon") >= 0) { out.phone = val; found = true; }
-      else if (k.indexOf("telegram") >= 0) { out.telegram = val.replace(/^@/, ""); found = true; }
-      else if (k.indexOf("web3") >= 0 || k.indexOf("kalit") >= 0) { out.web3formsKey = val; found = true; }
-      else if (k.indexOf("bot token") >= 0 || k === "token") { out.botToken = val; found = true; }
-      else if (k.indexOf("chat id") >= 0) { out.chatId = val; found = true; }
-      else if (k.indexOf("analytics") >= 0 || k.indexOf("ga4") >= 0) { out.ga4Id = val; found = true; }
+      } else if (k === "stol usti" || k.indexOf("stol usti (") === 0) { if (val !== "") { out.prices.counterPerM = digitsOnly(val); found = true; } }
+      else if (k.indexOf("telefon") === 0) { if (val) { out.phone = val; found = true; } }
+      else if (k.indexOf("telegram") === 0) { if (val) { out.telegram = val.replace(/^@/, ""); found = true; } }
+      else if (k.indexOf("web3") >= 0) { if (val) { out.web3formsKey = val; found = true; } }
+      else if (k.indexOf("analytics") >= 0 || k.indexOf("ga4") >= 0) { if (val) { out.ga4Id = val; found = true; } }
     });
     return found ? out : null;
   }
 
   function applySheet(cfg) {
     if (!cfg) return;
-    ["phone", "telegram", "web3formsKey", "botToken", "chatId", "ga4Id"].forEach(function (k) { if (cfg[k]) CONFIG[k] = cfg[k]; });
+    ["phone", "telegram", "web3formsKey", "ga4Id"].forEach(function (k) { if (cfg[k]) CONFIG[k] = cfg[k]; });
     Object.keys(cfg.prices || {}).forEach(function (k) { CONFIG.prices[k] = cfg.prices[k]; });
+
+    /* materiallar ro'yxati (raqamlangan qatorlardan): jadvaldagisi bilan to'liq almashadi */
+    var mNums = Object.keys(cfg.matList || {}).map(Number).sort(function (a, b) { return a - b; });
+    var newMats = [];
+    mNums.forEach(function (n) {
+      var e = cfg.matList[n];
+      if (!e.name) return;
+      var old = CONFIG.materials[newMats.length] || {};
+      newMats.push({ id: old.id || ("m" + newMats.length), name: e.name,
+        kvLow: e.kvLow != null ? e.kvLow : (old.kvLow || 0), kvUp: e.kvUp != null ? e.kvUp : (old.kvUp || 0), kvPenal: e.kvPenal != null ? e.kvPenal : (old.kvPenal || 0) });
+    });
+    if (newMats.length) CONFIG.materials = newMats;
+
+    /* stol usti turlari */
+    var cNums = Object.keys(cfg.ctList || {}).map(Number).sort(function (a, b) { return a - b; });
+    var newCt = [];
+    cNums.forEach(function (n) {
+      var e = cfg.ctList[n];
+      if (!e.name || !(e.perM > 0)) return;
+      var old = CONFIG.counterTypes[newCt.length] || {};
+      newCt.push({ id: old.id || ("ct" + newCt.length), name: e.name, perM: e.perM });
+    });
+    if (newCt.length) CONFIG.counterTypes = newCt;
+
+    /* eski usul: nomi bo'yicha material narxlarini yangilash */
     if (cfg.materials) {
       Object.keys(cfg.materials).forEach(function (mk) {
         var vals = cfg.materials[mk], target = null;
         if (mk === "__birinchi__") target = CONFIG.materials[0];
         else {
-          /* avval id bo'yicha aniq moslik, keyin nom bo'yicha (akril nomida "korpus laminat" bor, shuning uchun id birinchi) */
           target = CONFIG.materials.filter(function (m) { return normKey(m.id) === mk; })[0]
             || CONFIG.materials.filter(function (m) { return normKey(m.name).indexOf(mk) >= 0; })[0];
         }
         if (target) ["kvLow", "kvUp", "kvPenal"].forEach(function (f) { if (vals[f] != null) target[f] = vals[f]; });
       });
     }
+
+    /* jihozlar: nomi mos kelsa, eski id saqlanadi (tanlov yo'qolmasligi uchun) */
     if (cfg.extras && cfg.extras.length) {
-      CONFIG.extras = cfg.extras.filter(function (e) { return e.price > 0; });
+      var oldExtras = CONFIG.extras || [];
+      CONFIG.extras = cfg.extras.filter(function (e) { return e.price > 0; }).map(function (e, i) {
+        var same = oldExtras.filter(function (o) { return normKey(o.name) === normKey(e.name); })[0];
+        return { id: same ? same.id : ("x" + i + "_" + normKey(e.name).replace(/[^a-z0-9]/g, "")), name: e.name, price: e.price };
+      });
     }
   }
 
