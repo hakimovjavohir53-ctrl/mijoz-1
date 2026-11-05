@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Narxlar ulanishini tekshirish</title>
+<style>
+body { font: 16px/1.5 system-ui, Arial, sans-serif; margin: 0; padding: 16px; background: #f4f1ed; color: #17130e; max-width: 720px; margin: 0 auto; }
+h1 { font-size: 22px; }
+.row { background: #fff; border: 1px solid #dcd5cc; border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+.ok { border-left: 6px solid #1a7f37; }
+.bad { border-left: 6px solid #b23a2a; }
+.wait { border-left: 6px solid #999; }
+.t { font-weight: 700; }
+code { background: #eee; padding: 1px 5px; border-radius: 4px; word-break: break-all; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+td { border: 1px solid #ddd; padding: 4px 6px; vertical-align: top; word-break: break-word; }
+.verdict { font-size: 18px; font-weight: 700; padding: 14px; border-radius: 10px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<h1>Narxlar ulanishini tekshirish</h1>
+<div id="out"></div>
+<div id="verdict"></div>
+
+<script>
+var out = document.getElementById("out"), problems = [];
+function add(cls, title, body) {
+  var d = document.createElement("div");
+  d.className = "row " + cls;
+  d.innerHTML = '<div class="t">' + title + '</div>' + (body ? '<div>' + body + '</div>' : "");
+  out.appendChild(d);
+  if (cls === "bad") problems.push(title + (body ? ": " + body.replace(/<[^>]+>/g, "") : ""));
+}
+function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+function parseCSV(t) {
+  var rows = [], row = [], cur = "", q = false, i, c;
+  t = t.replace(/^\uFEFF/, "");
+  for (i = 0; i < t.length; i++) {
+    c = t[i];
+    if (q) { if (c === '"') { if (t[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(cur); cur = ""; }
+    else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+    else if (c !== "\r") cur += c;
+  }
+  if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+function step1() {
+  /* 1) narxlar.js */
+  var s = document.createElement("script");
+  s.src = "narxlar.js?t=" + Date.now();
+  s.onload = step2;
+  s.onerror = function () {
+    add("bad", "1. narxlar.js topilmadi", "Repoda <code>narxlar.js</code> fayli bo'lishi kerak va nomi aynan shunday yozilishi kerak.");
+    finish();
+  };
+  document.head.appendChild(s);
+}
+
+function step2() {
+  var c = window.ZEMAX_CONFIG;
+  if (!c) { add("bad", "1. narxlar.js ochildi, lekin ichi noto'g'ri", "Faylda <code>window.ZEMAX_CONFIG = {...};</code> bo'lishi kerak. Vergul yoki qo'shtirnoq o'chib ketgan bo'lishi mumkin."); finish(); return; }
+  add("ok", "1. narxlar.js ochildi", "");
+  var url = c.sheetUrl || "";
+  var tokOk = c.botToken && c.botToken.indexOf("SHU_YERGA") !== 0 && c.botToken.indexOf(":") > 0;
+  add(tokOk ? "ok" : "bad", "2. Bot tokeni " + (tokOk ? "kiritilgan" : "KIRITILMAGAN"), tokOk ? "Buyurtmalar botga yuboriladi." : "Tokenni <code>botToken:</code> qatoriga qo'ymasangiz, buyurtmalar botga kelmaydi.");
+  if (!url) { add("bad", "3. Jadval havolasi (sheetUrl) yo'q", "<code>narxlar.js</code> da <code>sheetUrl:</code> qatori bo'sh yoki yo'q. Sayt kod ichidagi eski narxlarni ishlatadi."); finish(); return; }
+  if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(url)) {
+    add("bad", "3. Jadval havolasi noto'g'ri", "Havola <code>https://docs.google.com/spreadsheets/...</code> bilan boshlanishi kerak. Hozir: <code>" + esc(url.slice(0, 80)) + "</code>");
+    finish(); return;
+  }
+  if (!/output=csv/.test(url)) {
+    add("bad", "3. Havola CSV formatda emas", "Havola oxirida <code>output=csv</code> bo'lishi kerak. Jadvalni e'lon qilganda ikkinchi tanlovda <b>CSV</b> ni tanlang. Hozir: <code>" + esc(url.slice(-60)) + "</code>");
+  } else {
+    add("ok", "3. Jadval havolasi to'g'ri ko'rinadi", "<code>..." + esc(url.slice(-50)) + "</code>");
+  }
+  /* 4) jadvalni yuklash */
+  fetch(url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now())
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+    .then(function (t) {
+      if (/<html|<!doctype/i.test(t.slice(0, 400))) {
+        add("bad", "4. Havola jadval ma'lumotini emas, veb-sahifa qaytardi", "Jadval hali \"Internetda chop etish\" qilinmagan yoki havola boshqa jadvalniki. Jadvalda <b>Fayl → Ulashish → Internetda chop etish</b> → varaq nomini va <b>CSV</b> ni tanlab <b>Chop etish</b> ni bosing, yangi havolani <code>narxlar.js</code> ga qo'ying.");
+        finish(); return;
+      }
+      var rows = parseCSV(t);
+      add("ok", "4. Jadval yuklandi (" + rows.length + " qator)", "");
+      var want = ["Material 1 nomi", "Material 1 pastki", "Stol usti 1 nomi", "Stol usti 1 narxi", "Orolcha", "Oyna profil", "G'aladon: qo'shimcha"];
+      var norm = function (x) { return String(x || "").toLowerCase().replace(/['`ʻʼ’]/g, "").replace(/\s+/g, " ").trim(); };
+      var html = '<table>';
+      var found = 0;
+      want.forEach(function (w) {
+        var hit = rows.filter(function (r) { return norm(r[0]).indexOf(norm(w)) === 0; })[0];
+        if (hit) found++;
+        html += "<tr><td>" + esc(w) + "</td><td>" + (hit ? "<b>" + esc(hit[1] == null ? "" : hit[1]) + "</b>" : "<span style='color:#b23a2a'>qator topilmadi</span>") + "</td></tr>";
+      });
+      html += "</table>";
+      add(found >= 4 ? "ok" : "bad", "5. Jadvaldagi asosiy qatorlar", html + (found < 4 ? "<p>Qatorlar nomi namunadagidek emas. <code>narxlar-jadval.csv</code> namunasini jadvalga <b>Replace current sheet</b> bilan qaytadan yuklang va faqat B ustundagi raqamlarni o'zgartiring.</p>" : "<p>Shu qiymatlar botga o'tadi.</p>"));
+      return fetch("index.html?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.text(); }).then(function (h) {
+        var fresh = h.indexOf("matList") >= 0;
+        add(fresh ? "ok" : "bad", "6. index.html " + (fresh ? "yangi versiya" : "ESKI versiya"), fresh ? "Jadvalni o'qiydigan kod yuklangan." : "GitHub'dagi <code>index.html</code> eski. Yangi <code>index.html</code> ni yuklab, eskisini almashtiring.");
+      }).catch(function () {
+        add("bad", "6. index.html ni tekshirib bo'lmadi", "Bu sahifa (tekshir.html) <code>index.html</code> bilan bir papkada, ya'ni repoda turishi kerak.");
+      }).then(finish);
+    }, function (e) {
+      add("bad", "4. Jadvalni yuklab bo'lmadi (" + esc(e.message || "xato") + ")", "Havola noto'g'ri yoki jadval e'lon qilinmagan. Jadvalni qaytadan \"Internetda chop etish\" qiling va yangi havolani <code>narxlar.js</code> ga qo'ying.");
+      finish();
+    });
+}
+
+function finish() {
+  var v = document.getElementById("verdict");
+  if (!problems.length) {
+    v.className = "verdict row ok";
+    v.textContent = "Hammasi to'g'ri. Narxlar jadvaldan olinadi. Telegramdagi botni butunlay yopib, qayta oching (kerak bo'lsa Telegram keshini tozalang).";
+  } else {
+    v.className = "verdict row bad";
+    v.textContent = "Topilgan muammo: " + problems[0];
+  }
+}
+step1();
+</script>
+</body>
+</html>

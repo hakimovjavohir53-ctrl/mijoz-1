@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ZEMAX Kitchen: oshxona narxini hisoblang</title>
-<script src="narxlar.js"></script>
+<script>document.write('<script src="narxlar.js?t=' + Date.now() + '"><\/script>');</script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -403,6 +403,7 @@ details .body { padding: 0 16px 16px; }
       <div class="contacts" id="contacts"></div>
     </div>
   </section>
+  <div id="sheetStatus" class="plan-note" hidden style="margin-top:14px; font-weight:600"></div>
   <footer class="legal">
     <a href="terms.html">Foydalanish shartlari</a>
     <span aria-hidden="true">·</span>
@@ -2361,22 +2362,43 @@ details .body { padding: 0 16px 16px; }
     } catch (e) {}
   }
 
+  /* Tekshiruv: sayt manzili oxiriga ?tekshir qo'shib oching (masalan .../mijoz-1/?tekshir), jadval holati pastda chiqadi */
+  function sheetStatus(msg, ok) {
+    var el = $("sheetStatus");
+    if (!el || !/[?&]tekshir/.test(location.search)) return;
+    el.hidden = false;
+    el.textContent = msg;
+    el.style.color = ok ? "#1a7f37" : "#b23a2a";
+  }
+
   function loadSheet() {
     var url = CONFIG.sheetUrl;
-    if (!url || typeof fetch !== "function") return;
+    if (!url || typeof fetch !== "function") { sheetStatus("Jadval manzili (sheetUrl) narxlar.js da yozilmagan, shuning uchun narxlar kodning ichidagisidan olinyapti.", false); return; }
+    if (!/^https?:\/\//.test(url)) { sheetStatus("sheetUrl noto'g'ri: havola https:// bilan boshlanishi kerak. Hozirgi qiymat: " + url.slice(0, 60), false); return; }
+    sheetStatus("Jadval yuklanmoqda...", true);
     fetch(url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now())
-      .then(function (res) { if (!res.ok) throw new Error("http"); return res.text(); })
+      .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.text(); })
       .then(function (t) {
         var cfg = sheetToConfig(parseCSV(t));
-        if (!cfg) return;
+        if (!cfg) {
+          var html = /<html|<!doctype/i.test(t.slice(0, 300));
+          sheetStatus(html
+            ? "Havola jadval ma'lumotini emas, veb-sahifani qaytardi. Jadvalni \"Internetda chop etish\" orqali CSV formatda e'lon qiling (oxiri output=csv bo'lsin)."
+            : "Jadval o'qildi, lekin tanish qatorlar topilmadi. Boshi: " + t.slice(0, 80).replace(/\s+/g, " "), false);
+          return;
+        }
         applySheet(cfg);
         try { localStorage.setItem(SHEET_CACHE, JSON.stringify(cfg)); } catch (e) {}
         startAnalytics();
         renderChoices();
         renderMatView();
         update();
+        sheetStatus("Jadvaldan o'qildi: " + Object.keys(cfg.matList || {}).filter(function (k) { return cfg.matList[k].name; }).length + " ta material, " + Object.keys(cfg.ctList || {}).filter(function (k) { return cfg.ctList[k].name; }).length + " ta stol usti turi, " +
+          (cfg.extras || []).length + " ta jihoz, " + Object.keys(cfg.prices || {}).length + " ta boshqa narx. Hozirgi materiallar: " + CONFIG.materials.map(function (m) { return m.name; }).join("; ") + ".", true);
       })
-      .catch(function () { /* internet yoki jadval bo'lmasa, oldingi narxlar ishlaydi */ });
+      .catch(function (e) {
+        sheetStatus("Jadvalni yuklab bo'lmadi (" + (e && e.message ? e.message : "xato") + "). Havola noto'g'ri yoki jadval e'lon qilinmagan bo'lishi mumkin. Eski narxlar ishlatilyapti.", false);
+      });
   }
 
   /* ---------- Google Analytics (ixtiyoriy) ---------- */
