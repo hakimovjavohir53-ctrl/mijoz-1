@@ -3,5 +3,5 @@ window.ZEMAX_CONFIG = {
   botToken: "8946168353:AAHKbvR9luGE2ppwl8KmtzDOfP23DxgJi5k",
   chatId: "180844999",
   phone: "+998700180011",
-  telegram: "@zemaxsotuvchi"
+  telegram: "@HAKIMOVJAVOHIR"
 };
