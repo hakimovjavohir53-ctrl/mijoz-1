@@ -2,7 +2,7 @@
 // Faqat qo'shtirnoq ichidagi matn va raqamlarni o'zgartiring.
 // Vergul (,) va qo'shtirnoq (") belgilarini o'chirmang, aks holda standart narxlar ishlaydi.
 
-window.ZEMAX_CONFIG = {...};
+window.ZEMAX_CONFIG = {
 
   // Aloqa (buyurtma shu yerga keladi)
   phone: "",          // telefon, masalan "+998901234567"
