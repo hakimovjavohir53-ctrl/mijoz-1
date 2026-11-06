@@ -24,7 +24,7 @@ td { border: 1px solid #ddd; padding: 4px 6px; vertical-align: top; word-break: 
 <div id="verdict"></div>
 
 <script>
-var out = document.getElementById("out"), problems = [];
+var out = document.getElementById("out"), problems = [], tgDone = false;
 function add(cls, title, body) {
   var d = document.createElement("div");
   d.className = "row " + cls;
@@ -66,27 +66,75 @@ function step2() {
   add("ok", "1. narxlar.js ochildi", "");
   var url = c.sheetUrl || "";
   var tokOk = c.botToken && c.botToken.indexOf("SHU_YERGA") !== 0 && c.botToken.indexOf(":") > 0;
-  add(tokOk ? "ok" : "bad", "2. Bot tokeni " + (tokOk ? "kiritilgan" : "KIRITILMAGAN"), tokOk ? "Buyurtmalar botga yuboriladi." : "Tokenni <code>botToken:</code> qatoriga qo'ymasangiz, buyurtmalar botga kelmaydi.");
-  if (!url) { add("bad", "3. Jadval havolasi (sheetUrl) yo'q", "<code>narxlar.js</code> da <code>sheetUrl:</code> qatori bo'sh yoki yo'q. Sayt kod ichidagi eski narxlarni ishlatadi."); finish(); return; }
+  add(tokOk ? "ok" : "bad", "2. Bot tokeni " + (tokOk ? "kiritilgan" : "KIRITILMAGAN"), tokOk ? "Format to'g'ri ko'rinadi." : "Tokenni <code>botToken:</code> qatoriga qo'ymasangiz, buyurtmalar botga kelmaydi.");
+  var chatOk = c.chatId && /^-?\d+$/.test(String(c.chatId));
+  add(chatOk ? "ok" : "bad", "3. Chat ID " + (chatOk ? "kiritilgan: " + esc(c.chatId) : "noto'g'ri"), chatOk ? "Buyurtmalar shu Telegram hisobiga keladi. Bu SIZNING raqamingiz bo'lishi kerak." : "<code>chatId:</code> faqat raqamlardan iborat bo'lishi kerak. O'zingizniki uchun Telegramda <b>@userinfobot</b> ga yozing, u ID raqamingizni aytadi.");
+  tgCheck(c, tokOk, chatOk).then(function () { sheetPart(c, url); });
+}
+
+function tgErr(d) {
+  var t = String((d && d.description) || "").toLowerCase();
+  if (t.indexOf("unauthorized") >= 0 || (d && d.error_code === 401)) return "Token noto'g'ri yoki @BotFather'da bekor qilingan (Revoke). @BotFather → /mybots → botni tanlang → API Token orqali joriy tokenni oling va <code>narxlar.js</code> ga qo'ying.";
+  if (t.indexOf("chat not found") >= 0) return "Chat ID noto'g'ri, yoki siz botga hali <b>/start</b> bosmagansiz. Botingizni oching, <b>/start</b> bosing va chat ID ni @userinfobot dan qayta tekshiring.";
+  if (t.indexOf("blocked") >= 0 || t.indexOf("initiate") >= 0 || t.indexOf("forbidden") >= 0) return "Bot sizga yoza olmaydi: botni bloklagansiz yoki <b>/start</b> bosmagansiz. Botni oching va <b>/start</b> bosing.";
+  return "Telegram javobi: <code>" + esc((d && d.description) || "noma'lum xato") + "</code>";
+}
+
+function tgCheck(c, tokOk, chatOk) {
+  return new Promise(function (resolve) {
+    if (!tokOk) { resolve(); return; }
+    fetch("https://api.telegram.org/bot" + c.botToken + "/getMe")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok) add("ok", "4. Token Telegramda ishlaydi", "Bot: <b>@" + esc(d.result.username) + "</b>. Buyurtma shu botdan sizga keladi.");
+        else add("bad", "4. Token Telegram tomonidan qabul qilinmadi", tgErr(d));
+        if (chatOk) {
+          var box = document.createElement("div");
+          box.className = "row wait";
+          box.innerHTML = '<div class="t">5. Sinov xabari</div><div>Telegramga haqiqiy xabar yuborib ko\'ring:</div><p><button id="tgTest" style="font-size:16px;padding:10px 16px;border-radius:8px;border:0;background:#f28123;font-weight:700;cursor:pointer">Sinov xabarini yuborish</button></p><div id="tgRes"></div>';
+          out.appendChild(box);
+          document.getElementById("tgTest").onclick = function () {
+            var res = document.getElementById("tgRes");
+            res.textContent = "Yuborilmoqda...";
+            fetch("https://api.telegram.org/bot" + c.botToken + "/sendMessage", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: c.chatId, text: "Sinov xabari: ZEMAX Kitchen buyurtmalari shu yerga keladi." })
+            }).then(function (r) { return r.json(); }).then(function (d2) {
+              box.className = "row " + (d2.ok ? "ok" : "bad");
+              res.innerHTML = d2.ok ? "<b>Yuborildi.</b> Telegramni oching: botdan sinov xabari kelgan bo'lishi kerak. Kelsa, buyurtmalar ham keladi." : "<b>Yuborilmadi.</b> " + tgErr(d2);
+              tgDone = true;
+              if (!d2.ok) problems.push("5. Sinov xabari yuborilmadi: " + res.textContent.replace("Yuborilmadi.", "").trim());
+              finish();
+            }).catch(function () { box.className = "row bad"; res.innerHTML = "<b>Telegramga ulanib bo'lmadi.</b> Internet yoki VPN/tarmoq sozlamasini tekshiring."; tgDone = true; problems.push("5. Telegramga ulanib bo'lmadi"); finish(); });
+          };
+        }
+        resolve();
+      })
+      .catch(function () { add("bad", "4. Telegramga ulanib bo'lmadi", "Telegram serveriga so'rov o'tmadi. Internet yoki VPN/tarmoq sozlamasini tekshiring."); resolve(); });
+  });
+}
+
+function sheetPart(c, url) {
+  if (!url) { add("bad", "6. Jadval havolasi (sheetUrl) yo'q", "<code>narxlar.js</code> da <code>sheetUrl:</code> qatori bo'sh yoki yo'q. Sayt kod ichidagi eski narxlarni ishlatadi."); finish(); return; }
   if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(url)) {
-    add("bad", "3. Jadval havolasi noto'g'ri", "Havola <code>https://docs.google.com/spreadsheets/...</code> bilan boshlanishi kerak. Hozir: <code>" + esc(url.slice(0, 80)) + "</code>");
+    add("bad", "6. Jadval havolasi noto'g'ri", "Havola <code>https://docs.google.com/spreadsheets/...</code> bilan boshlanishi kerak. Hozir: <code>" + esc(url.slice(0, 80)) + "</code>");
     finish(); return;
   }
   if (!/output=csv/.test(url)) {
     add("bad", "3. Havola CSV formatda emas", "Havola oxirida <code>output=csv</code> bo'lishi kerak. Jadvalni e'lon qilganda ikkinchi tanlovda <b>CSV</b> ni tanlang. Hozir: <code>" + esc(url.slice(-60)) + "</code>");
   } else {
-    add("ok", "3. Jadval havolasi to'g'ri ko'rinadi", "<code>..." + esc(url.slice(-50)) + "</code>");
+    add("ok", "6. Jadval havolasi to'g'ri ko'rinadi", "<code>..." + esc(url.slice(-50)) + "</code>");
   }
   /* 4) jadvalni yuklash */
   fetch(url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now())
     .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
     .then(function (t) {
       if (/<html|<!doctype/i.test(t.slice(0, 400))) {
-        add("bad", "4. Havola jadval ma'lumotini emas, veb-sahifa qaytardi", "Jadval hali \"Internetda chop etish\" qilinmagan yoki havola boshqa jadvalniki. Jadvalda <b>Fayl → Ulashish → Internetda chop etish</b> → varaq nomini va <b>CSV</b> ni tanlab <b>Chop etish</b> ni bosing, yangi havolani <code>narxlar.js</code> ga qo'ying.");
+        add("bad", "7. Havola jadval ma'lumotini emas, veb-sahifa qaytardi", "Jadval hali \"Internetda chop etish\" qilinmagan yoki havola boshqa jadvalniki. Jadvalda <b>Fayl → Ulashish → Internetda chop etish</b> → varaq nomini va <b>CSV</b> ni tanlab <b>Chop etish</b> ni bosing, yangi havolani <code>narxlar.js</code> ga qo'ying.");
         finish(); return;
       }
       var rows = parseCSV(t);
-      add("ok", "4. Jadval yuklandi (" + rows.length + " qator)", "");
+      add("ok", "7. Jadval yuklandi (" + rows.length + " qator)", "");
       var want = ["Material 1 nomi", "Material 1 pastki", "Stol usti 1 nomi", "Stol usti 1 narxi", "Orolcha", "Oyna profil", "G'aladon: qo'shimcha"];
       var norm = function (x) { return String(x || "").toLowerCase().replace(/['`ʻʼ’]/g, "").replace(/\s+/g, " ").trim(); };
       var html = '<table>';
@@ -97,15 +145,15 @@ function step2() {
         html += "<tr><td>" + esc(w) + "</td><td>" + (hit ? "<b>" + esc(hit[1] == null ? "" : hit[1]) + "</b>" : "<span style='color:#b23a2a'>qator topilmadi</span>") + "</td></tr>";
       });
       html += "</table>";
-      add(found >= 4 ? "ok" : "bad", "5. Jadvaldagi asosiy qatorlar", html + (found < 4 ? "<p>Qatorlar nomi namunadagidek emas. <code>narxlar-jadval.csv</code> namunasini jadvalga <b>Replace current sheet</b> bilan qaytadan yuklang va faqat B ustundagi raqamlarni o'zgartiring.</p>" : "<p>Shu qiymatlar botga o'tadi.</p>"));
+      add(found >= 4 ? "ok" : "bad", "8. Jadvaldagi asosiy qatorlar", html + (found < 4 ? "<p>Qatorlar nomi namunadagidek emas. <code>narxlar-jadval.csv</code> namunasini jadvalga <b>Replace current sheet</b> bilan qaytadan yuklang va faqat B ustundagi raqamlarni o'zgartiring.</p>" : "<p>Shu qiymatlar botga o'tadi.</p>"));
       return fetch("index.html?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.text(); }).then(function (h) {
         var fresh = h.indexOf("matList") >= 0;
-        add(fresh ? "ok" : "bad", "6. index.html " + (fresh ? "yangi versiya" : "ESKI versiya"), fresh ? "Jadvalni o'qiydigan kod yuklangan." : "GitHub'dagi <code>index.html</code> eski. Yangi <code>index.html</code> ni yuklab, eskisini almashtiring.");
+        add(fresh ? "ok" : "bad", "9. index.html " + (fresh ? "yangi versiya" : "ESKI versiya"), fresh ? "Jadvalni o'qiydigan kod yuklangan." : "GitHub'dagi <code>index.html</code> eski. Yangi <code>index.html</code> ni yuklab, eskisini almashtiring.");
       }).catch(function () {
-        add("bad", "6. index.html ni tekshirib bo'lmadi", "Bu sahifa (tekshir.html) <code>index.html</code> bilan bir papkada, ya'ni repoda turishi kerak.");
+        add("bad", "9. index.html ni tekshirib bo'lmadi", "Bu sahifa (tekshir.html) <code>index.html</code> bilan bir papkada, ya'ni repoda turishi kerak.");
       }).then(finish);
     }, function (e) {
-      add("bad", "4. Jadvalni yuklab bo'lmadi (" + esc(e.message || "xato") + ")", "Havola noto'g'ri yoki jadval e'lon qilinmagan. Jadvalni qaytadan \"Internetda chop etish\" qiling va yangi havolani <code>narxlar.js</code> ga qo'ying.");
+      add("bad", "7. Jadvalni yuklab bo'lmadi (" + esc(e.message || "xato") + ")", "Havola noto'g'ri yoki jadval e'lon qilinmagan. Jadvalni qaytadan \"Internetda chop etish\" qiling va yangi havolani <code>narxlar.js</code> ga qo'ying.");
       finish();
     });
 }
@@ -114,7 +162,8 @@ function finish() {
   var v = document.getElementById("verdict");
   if (!problems.length) {
     v.className = "verdict row ok";
-    v.textContent = "Hammasi to'g'ri. Narxlar jadvaldan olinadi. Telegramdagi botni butunlay yopib, qayta oching (kerak bo'lsa Telegram keshini tozalang).";
+    var pending = document.getElementById("tgTest") && !tgDone;
+    v.textContent = "Hammasi to'g'ri. Narxlar jadvaldan olinadi. Telegramdagi botni butunlay yopib, qayta oching (kerak bo'lsa Telegram keshini tozalang)." + (pending ? " Buyurtma kelishini bilish uchun 5-qadamdagi \"Sinov xabarini yuborish\" tugmasini bosing." : "");
   } else {
     v.className = "verdict row bad";
     v.textContent = "Topilgan muammo: " + problems[0];
