@@ -65,11 +65,56 @@ function step2() {
   if (!c) { add("bad", "1. narxlar.js ochildi, lekin ichi noto'g'ri", "Faylda <code>window.ZEMAX_CONFIG = {...};</code> bo'lishi kerak. Vergul yoki qo'shtirnoq o'chib ketgan bo'lishi mumkin."); finish(); return; }
   add("ok", "1. narxlar.js ochildi", "");
   var url = c.sheetUrl || "";
+  if (c.orderUrl) { workerPart(c, url); return; }
   var tokOk = c.botToken && c.botToken.indexOf("SHU_YERGA") !== 0 && c.botToken.indexOf(":") > 0;
   add(tokOk ? "ok" : "bad", "2. Bot tokeni " + (tokOk ? "kiritilgan" : "KIRITILMAGAN"), tokOk ? "Format to'g'ri ko'rinadi." : "Tokenni <code>botToken:</code> qatoriga qo'ymasangiz, buyurtmalar botga kelmaydi.");
   var chatOk = c.chatId && /^-?\d+$/.test(String(c.chatId));
   add(chatOk ? "ok" : "bad", "3. Chat ID " + (chatOk ? "kiritilgan: " + esc(c.chatId) : "noto'g'ri"), chatOk ? "Buyurtmalar shu Telegram hisobiga keladi. Bu SIZNING raqamingiz bo'lishi kerak." : "<code>chatId:</code> faqat raqamlardan iborat bo'lishi kerak. O'zingizniki uchun Telegramda <b>@userinfobot</b> ga yozing, u ID raqamingizni aytadi.");
   tgCheck(c, tokOk, chatOk).then(function () { sheetPart(c, url); });
+}
+
+function workerErr(status, d) {
+  var e = (d && d.error) || "";
+  if (status === 403 || e === "origin") return "Worker bu saytni tanimadi. Cloudflare'da <code>ALLOWED_ORIGINS</code> qiymati aynan <code>https://hakimovjavohir53-ctrl.github.io</code> bo'lishi kerak (oxirida / yoki /mijoz-1 yozilmasin).";
+  if (e === "not_configured") return "Cloudflare'da <code>BOT_TOKEN</code> yoki <code>CHAT_ID</code> kiritilmagan. Worker → Settings → Variables and Secrets ga qo'shing va Deploy qiling.";
+  if (e === "upstream") return tgErr({ description: d.detail });
+  if (e === "invalid") return "Sinov ma'lumotlari rad etildi (kutilmagan holat).";
+  return "Javob: <code>HTTP " + status + " " + esc(e) + "</code>";
+}
+
+function workerPart(c, url) {
+  add("ok", "2. Buyurtmalar Cloudflare Worker orqali yuboriladi", "<code>" + esc(c.orderUrl) + "</code>");
+  var leak = c.botToken && String(c.botToken).indexOf(":") > 0 && String(c.botToken).indexOf("SHU_YERGA") !== 0;
+  if (leak) add("bad", "3. Token hali narxlar.js ichida turibdi (xavfli)", "Worker ishlayotganini tasdiqlagach, <code>botToken:</code> va <code>chatId:</code> qatorlarini <code>narxlar.js</code> dan O'CHIRING. Aks holda token hamma ko'ra oladigan joyda qoladi.");
+  else add("ok", "3. Token narxlar.js da yo'q (xavfsiz)", "");
+  fetch(c.orderUrl).then(function (r) { return r.text(); }).then(function (txt) {
+    var okAll = /BOT_TOKEN: kiritilgan/.test(txt) && /CHAT_ID: kiritilgan/.test(txt) && !/ALLOWED_ORIGINS: KIRITILMAGAN/.test(txt);
+    add(okAll ? "ok" : "bad", "4. Worker javob berdi", "<pre style='white-space:pre-wrap;margin:6px 0'>" + esc(txt) + "</pre>" + (okAll ? "" : "Uchala qator \"kiritilgan\" bo'lishi kerak. Cloudflare'da Worker → Settings → Variables and Secrets ga yetishmaydiganini qo'shing."));
+    var box = document.createElement("div");
+    box.className = "row wait";
+    box.innerHTML = '<div class="t">5. Sinov buyurtmasi</div><div>Worker orqali Telegramga haqiqiy xabar yuborib ko\'ring:</div><p><button id="tgTest" style="font-size:16px;padding:10px 16px;border-radius:8px;border:0;background:#f28123;font-weight:700;cursor:pointer">Sinov buyurtmasini yuborish</button></p><div id="tgRes"></div>';
+    out.appendChild(box);
+    document.getElementById("tgTest").onclick = function () {
+      var res = document.getElementById("tgRes"); res.textContent = "Yuborilmoqda...";
+      var st = 0;
+      fetch(c.orderUrl, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Sinov", phone: "+998901234567", note: "", text: "Sinov buyurtmasi: ZEMAX Kitchen buyurtmalari Worker orqali shu yerga keladi." }) })
+        .then(function (r) { st = r.status; return r.json(); })
+        .then(function (d) {
+          box.className = "row " + (d.ok ? "ok" : "bad");
+          res.innerHTML = d.ok ? "<b>Yuborildi.</b> Telegramni oching: botdan sinov xabari kelgan bo'lishi kerak. Kelsa, buyurtmalar Worker orqali keladi." : "<b>Yuborilmadi.</b> " + workerErr(st, d);
+          tgDone = true;
+          if (!d.ok) problems.push("5. Sinov buyurtmasi yuborilmadi: " + res.textContent.replace("Yuborilmadi.", "").trim());
+          finish();
+        })
+        .catch(function () { box.className = "row bad"; res.innerHTML = "<b>Workerga ulanib bo'lmadi.</b> <code>orderUrl</code> manzili noto'g'ri bo'lishi mumkin."; tgDone = true; problems.push("5. Workerga ulanib bo'lmadi"); finish(); });
+    };
+    if (!okAll) problems.push("4. Worker sozlamalari to'liq emas");
+    sheetPart(c, url);
+  }).catch(function () {
+    add("bad", "4. Workerga ulanib bo'lmadi", "<code>orderUrl</code> manzili noto'g'ri yoki Worker hali Deploy qilinmagan. Manzil <code>https://...workers.dev</code> ko'rinishida bo'lishi kerak.");
+    sheetPart(c, url);
+  });
 }
 
 function tgErr(d) {
