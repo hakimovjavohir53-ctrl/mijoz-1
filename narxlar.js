@@ -1,7 +1,7 @@
 window.ZEMAX_CONFIG = { orderUrl: "https://super-snowflake-zemax-buyutma.zemax.workers.dev/",
   sheetUrl: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQV-GqtfpgMaytswnuyJ5Pxy6tdQiY0d5kp16h52mh7Cw28wmOiPSEPv6npg0mCW7502Q25udu0XbhH/pub?gid=1454982140&single=true&output=csv",
-  botToken: "8946168353:AAEj1VcFVrnCAhL2Wk7D_QS_RHoAPK-h9Dw",
-  chatId: "180844999",
+  botToken: "",
+  chatId: "",
   phone: "+998700180011",
   telegram: "@HAKIMOVJAVOHIR"
 };
