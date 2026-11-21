@@ -2114,11 +2114,24 @@ details .body { padding: 0 16px 16px; }
       box.appendChild(b);
     }
     if (CONFIG.phone) {
+      var num = String(CONFIG.phone).replace(/[^\d+]/g, "");
+      if (num.charAt(0) !== "+" && /^998\d{9}$/.test(num)) num = "+" + num;
       var a = document.createElement("a");
       a.className = "btn btn-ghost";
-      a.href = "tel:" + CONFIG.phone.replace(/\s/g, "");
-      a.textContent = "Qo'ng'iroq qilish";
+      a.href = "tel:" + num;
+      a.textContent = "Qo'ng'iroq qilish: " + CONFIG.phone;
+      var note = document.createElement("p");
+      note.className = "pick-hint";
+      a.addEventListener("click", function () {
+        /* telefon ilovasi ochilmasa (kompyuter, ba'zi Telegram oynalari), raqamni nusxalab beramiz */
+        setTimeout(function () {
+          if (document.hidden) return;
+          var show = function (ok) { note.textContent = "Qo'ng'iroq ochilmasa, raqamni telefoningizdan terib qo'ng'iroq qiling: " + CONFIG.phone + (ok ? " (nusxalandi)." : "."); };
+          try { navigator.clipboard.writeText(num).then(function () { show(true); }, function () { show(false); }); } catch (e) { show(false); }
+        }, 900);
+      });
       box.appendChild(a);
+      box.appendChild(note);
     }
   }
 
